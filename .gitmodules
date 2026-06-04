@@ -1,0 +1,6 @@
+[submodule "references/hermes-agent"]
+	path = references/hermes-agent
+	url = https://github.com/NousResearch/hermes-agent.git
+[submodule "references/openclaw"]
+	path = references/openclaw
+	url = https://github.com/openclaw/openclaw.git
