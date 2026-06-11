@@ -27,8 +27,6 @@ Operations covers the boring machinery that keeps Param online:
 
 The target host is a Hetzner CX23 VPS running native Linux services.
 
-Docker is not part of the default operating model.
-
 ## Operating Model
 
 Default deployment:
@@ -245,10 +243,14 @@ Installer responsibilities:
 - install Git and build tools
 - install Postgres and pgvector for `local-postgres`
 - install runtime adapter dependencies
+- show an interactive runtime install checklist for Codex, OpenCode, and
+  Antigravity when no runtime flags are provided
 - create service user
 - create directories
 - install app dependencies
 - install packages according to `docs/DEPENDENCIES.md`
+- collect the owner Telegram user id on first install when not already provided
+- help discover Telegram owner/group ids when needed
 - create `.env` from `.env.example` when missing
 - create `param.config.local.ts` when missing
 - create systemd service files
@@ -289,6 +291,18 @@ Database install flags:
 General flags:
 
 ```text
+--interactive
+  ask questions, including runtime install checkboxes
+
+--non-interactive
+  never show prompts; use explicit flags and config defaults
+
+--owner-telegram-user-id <id>
+  set the first trusted owner and default allowed DM user
+
+--discover-telegram-ids
+  run temporary Telegram id discovery before starting services
+
 --dry-run
   show what would change
 
@@ -303,6 +317,154 @@ General flags:
 ```
 
 `--yes` must not approve destructive operations.
+
+## Installer Prompt UI
+
+Interactive installer input should use `@clack/prompts`.
+
+Use it for:
+
+- checkbox runtime selection
+- yes/no confirmation
+- simple selects
+- short text inputs
+
+Use `@inquirer/prompts` only as a fallback if a specific installer prompt
+becomes awkward in Clack.
+
+Use built-in `util.parseArgs` for command-line flags.
+
+Ink is not the default installer prompt layer.
+
+Ink is a good fit for a richer operator/admin terminal UI later, such as:
+
+- live service status
+- worker/job queues
+- actor run timelines
+- runtime health
+- log tailing
+- approval queue inspection
+- keyboard-driven admin actions
+
+That is a different surface from the installer. The installer should stay a
+boring script with prompts and flags. If an Ink admin TUI is added later, it
+should call the same ops/config/action-review APIs as other admin surfaces.
+
+Do not build a custom full-screen TUI for the installer. The installer should
+feel like a normal terminal setup script: clear prompts, explicit defaults,
+dry-run support, and a printed action plan before changes.
+
+Prompt rules:
+
+- interactive prompts require a TTY
+- `--non-interactive` never prompts
+- CI/non-TTY mode never prompts
+- missing required choices in non-interactive mode fail with a clear message
+- every prompt must have an equivalent flag or config value
+- secrets should be requested through `.env` creation/editing, not echoed in
+  visible prompts
+- `Ctrl+C` should exit cleanly without a stack trace
+
+Runtime install flags:
+
+```text
+--runtime codex
+  install/check Codex CLI runtime
+
+--runtime opencode
+  install/check OpenCode CLI runtime
+
+--runtime antigravity
+  install/check Antigravity CLI runtime
+
+--runtime all
+  install/check all target CLI runtimes
+
+--runtime none
+  skip CLI runtime installation
+```
+
+`--runtime` can be repeated.
+
+When no runtime flag is provided in interactive mode, the installer should show
+a terminal checklist:
+
+```text
+select runtimes to install/check:
+[x] Codex CLI
+[x] OpenCode CLI
+[x] Antigravity CLI
+```
+
+Default interactive selection is all three runtimes checked.
+
+Checklist behavior:
+
+- checked means install if missing, then verify command availability
+- unchecked means do not install; keep runtime availability as configured
+- Codex is the first/default actor runtime and should normally stay checked
+- OpenCode and Antigravity are enabled target runtimes and should be easy to
+  install at setup time
+- exact install commands belong in implementation/runtime installer manifests
+  and must be verified against current official docs
+- failed installation of a `require` runtime fails setup
+- failed installation of a `warn` runtime records a warning and keeps setup
+  moving
+
+Installing or changing host-level CLI runtimes after initial setup is a
+server-changing action and goes through Action Review.
+
+## First Owner Setup
+
+On the first VPS install, Param needs one trusted owner.
+
+Interactive setup should ask for:
+
+```text
+owner Telegram user id
+```
+
+The installer writes that value to `.env` as:
+
+```dotenv
+PARAM_OWNER_TELEGRAM_USER_ID=...
+```
+
+That id is used for two different things:
+
+- default allowed DM user, so the owner can talk to Param privately
+- first trusted user, with `global` and `server_admin` scopes
+
+Allowed groups are separate. The installer must not treat the owner's id as an
+allowed group, and it must not treat allowed groups as trusted users.
+
+In non-interactive mode, setup must receive the owner id through
+`--owner-telegram-user-id` or an existing `PARAM_OWNER_TELEGRAM_USER_ID`.
+
+## Telegram Id Discovery
+
+The installer should provide a safe helper for finding Telegram ids.
+
+Flow:
+
+```text
+1. User provides TELEGRAM_BOT_TOKEN.
+2. Installer starts a temporary discovery poller.
+3. Owner sends /start or another setup phrase to the bot in DM.
+4. Helper prints the sender Telegram user id.
+5. Optional: owner adds the bot to an allowed group and sends a setup phrase.
+6. Helper prints the group chat id and topic id, if present.
+7. Helper stops before normal Param services start.
+```
+
+Discovery mode should:
+
+- use the bot token only for setup
+- avoid creating normal sessions or actor runs
+- store no full chat history
+- print exact ids the user can put into config
+- never mark an allowed group as trusted
+- never mark the owner id as an allowed group
 
 ## Environment And Config
 

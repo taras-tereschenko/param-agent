@@ -36,10 +36,15 @@ still owns:
 - output validation
 - delivery to chat
 
-## AI SDK Is Not The Runtime Adapter Layer
+## AI SDK Is Optional And Not The Runtime Adapter Layer
 
-AI SDK can be useful inside Param for direct model calls, structured output,
-tool schemas, generated UI data, testing, and telemetry.
+Param starts with Codex CLI through the Codex runtime adapter.
+
+AI SDK is optional. It can be useful later for structured output helpers, tool
+schemas, generated UI data, testing, telemetry, an API-backed runtime, or a
+community-provider experiment.
+
+Direct paid API model calls are not part of the default runtime.
 
 It does not replace runtime adapters.
 
@@ -64,7 +69,8 @@ Current provider posture:
   runtime adapter.
 - Antigravity has no default AI SDK provider dependency in Param.
 - Direct provider packages such as `@ai-sdk/openai`, `@ai-sdk/anthropic`, and
-  `@ai-sdk/google` are for direct model calls, not for controlling coding CLIs.
+  `@ai-sdk/google` are optional future API-runtime dependencies, not bootstrap
+  dependencies and not a way to control coding CLIs.
 
 ## Adapter Implementation Posture
 
@@ -85,6 +91,7 @@ Default posture:
 An adapter implementation is acceptable only when it proves:
 
 - installed version and capability detection
+- installer/checker integration for the host CLI runtime
 - process/server lifecycle control
 - workspace setup and cleanup
 - environment and secret filtering
@@ -583,7 +590,7 @@ Rules:
 - cleanup should not delete unreported artifacts
 - server paths require stricter approval than project workspaces
 
-Without Docker, workspaces are a key isolation layer.
+Workspaces are a key isolation layer.
 
 ## Environment And Secrets
 

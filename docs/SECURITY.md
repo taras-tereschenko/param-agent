@@ -255,6 +255,9 @@ Threat:
 
 Controls:
 
+- check configured allowed DM users, groups, and topics before creating normal
+  session state
+- reject or minimally audit disallowed Telegram updates by stable ids
 - route by stable Telegram ids, not display names
 - store requester and approver separately
 - approval replies must target the approval message or include exact approval id
@@ -355,7 +358,7 @@ Secrets must not be stored in:
 Secrets may be referenced by:
 
 ```text
-{ env: "OPENAI_API_KEY" }
+{ env: "TELEGRAM_BOT_TOKEN" }
 { file: "/etc/param-agent/some-secret" }
 ```
 

@@ -384,8 +384,8 @@ When new information conflicts with old memory:
 Example:
 
 ```text
-old: Taras wants no Docker.
-new: Taras is okay with Docker for isolated experiments.
+old: Taras wants docs split into many focused files.
+new: Taras wants a short implementation guide so agents know what to read first.
 candidate: update project memory with narrower scope.
 ```
 

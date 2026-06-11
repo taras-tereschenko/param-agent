@@ -204,6 +204,13 @@ export default defineParamConfig({
     telegram: {
       enabled: true,
       defaultAccountId: "main",
+      access: {
+        rejectUnauthorized: true,
+        unauthorizedBehavior: "ignore",
+        allowedPrivateUserIds: [{ env: "PARAM_OWNER_TELEGRAM_USER_ID" }],
+        allowedGroupChatIds: [],
+        allowedTopicIds: [],
+      },
       accounts: {
         main: {
           botToken: { env: "TELEGRAM_BOT_TOKEN" },
@@ -224,7 +231,7 @@ export default defineParamConfig({
       label: "owner",
       platform: "telegram",
       platformUserId: { env: "PARAM_OWNER_TELEGRAM_USER_ID" },
-      scopes: ["global", "server_admin"],
+      scopes: [{ scope: "global" }, { scope: "server_admin" }],
     },
   ],
 
@@ -248,16 +255,19 @@ export default defineParamConfig({
       enabled: true,
       command: "codex",
       workspacesDir: "/var/lib/param-agent/runtime-workspaces/codex",
+      startupCheck: "require",
     },
     opencode: {
       enabled: true,
       command: "opencode",
       workspacesDir: "/var/lib/param-agent/runtime-workspaces/opencode",
+      startupCheck: "warn",
     },
     antigravity: {
       enabled: true,
       command: "antigravity",
       workspacesDir: "/var/lib/param-agent/runtime-workspaces/antigravity",
+      startupCheck: "warn",
     },
   },
 
@@ -483,6 +493,11 @@ export default defineParamConfig({
   installer: {
     systemd: true,
     serviceUser: "param",
+    runtimes: {
+      interactiveChecklist: true,
+      defaultSelected: ["codex", "opencode", "antigravity"],
+      installIfMissing: true,
+    },
   },
 });
 ```
@@ -578,7 +593,19 @@ type ChannelsConfig = {
 type TelegramChannelConfig = {
   enabled: boolean;
   defaultAccountId: string;
+  access: TelegramAccessConfig;
   accounts: Record<string, TelegramAccountConfig>;
+};
+
+type TelegramAccessConfig = {
+  rejectUnauthorized: boolean;
+  unauthorizedBehavior: "ignore" | "audit_minimal";
+  allowedPrivateUserIds: (string | SecretRef)[];
+  allowedGroupChatIds: (string | SecretRef)[];
+  allowedTopicIds?: {
+    chatId: string | SecretRef;
+    topicId: string | SecretRef;
+  }[];
 };
 
 type TelegramAccountConfig = {
@@ -615,9 +642,26 @@ Default:
 
 ```text
 Telegram uses polling on the VPS.
+Telegram rejects disallowed users/groups/topics by config.
 ```
 
 Webhook mode requires public HTTPS and a secret token.
+
+Access rules decide who can talk to Param at all.
+
+`allowedPrivateUserIds` is for DMs. It lists Telegram user ids that may open a
+private chat with Param.
+
+`allowedGroupChatIds` is for groups. It lists Telegram group/supergroup chat ids
+where Param may participate. Everyone in an allowed group can talk with Param in
+that group session.
+
+`allowedTopicIds` optionally narrows allowed group access to specific forum
+topics.
+
+Allowed access is not trust. Trusted users decide who can approve consequential
+actions. A user can be allowed to chat without being a trusted approver, and a
+group can be allowed without making everyone in that group trusted.
 
 Future channel configs should follow the same pattern:
 
@@ -636,24 +680,44 @@ type TrustedUserConfig = {
   label: string;
   platform: "telegram" | string;
   platformUserId: string | SecretRef;
-  scopes: TrustScope[];
+  scopes: TrustedUserScopeConfig[];
 };
 
 type TrustScope = "global" | "chat" | "project" | "server_admin";
+
+type TrustedUserScopeConfig =
+  | { scope: "global" }
+  | { scope: "server_admin" }
+  | {
+      scope: "chat";
+      platform: "telegram" | string;
+      chatId: string | SecretRef;
+      topicId?: string | SecretRef;
+    }
+  | {
+      scope: "project";
+      projectId: string;
+    };
 ```
 
 Rules:
 
 - at least one global/server admin trusted user is required in production
+- the first VPS install configures one owner trusted user from
+  `PARAM_OWNER_TELEGRAM_USER_ID`
+- the owner is also the default allowed DM user
 - trusted users can approve consequential actions
 - trusted users are not memory
+- chat-scoped trust must identify the exact chat, and optionally topic, where
+  the user can approve
+- project-scoped trust must identify the exact project
 - changing trusted users requires Action Review or direct admin access
 
 ## Actor Config
 
 ```ts
 type ActorConfig = {
-  defaultRuntime: "codex" | "opencode" | "antigravity" | "native";
+  defaultRuntime: "codex" | "opencode" | "antigravity";
   maxVisibleMessagesPerRun: number;
   requireDoneOutput: boolean;
   styleGuard: {
@@ -753,6 +817,7 @@ type CliRuntimeConfig = {
   command: string;
   args?: string[];
   workspacesDir: string;
+  startupCheck?: "require" | "warn" | "skip";
   env?: Record<string, string | SecretRef>;
   personalityInjection?: {
     enabled: boolean;
@@ -812,6 +877,29 @@ type BrowserRuntimeConfig = {
   };
 };
 ```
+
+`enabled` means Param is allowed to use that runtime when its adapter is
+implemented and the runtime is available.
+
+`startupCheck` controls boot behavior:
+
+```text
+require
+  fail startup when the runtime is enabled but unavailable
+
+warn
+  log/report missing runtime, but keep Param online
+
+skip
+  do not check runtime availability at startup
+```
+
+Default target posture:
+
+- Codex is enabled and required because it is the first/default main actor
+  runtime.
+- OpenCode is enabled but warning-only at startup until its adapter is ready.
+- Antigravity is enabled but warning-only at startup until its adapter is ready.
 
 Runtime config should not grant tool power directly. Tool access still goes
 through Tool Registry and Action Review.
@@ -1125,6 +1213,8 @@ type InstallerConfig = {
   serviceUser: string;
   db: "local-postgres" | "existing-url" | "managed-neon" | "managed-supabase";
   dryRunDefault?: boolean;
+  owner?: OwnerInstallerConfig;
+  runtimes?: RuntimeInstallerConfig;
   services?: {
     app?: string;
     worker?: string;
@@ -1142,10 +1232,40 @@ type InstallerConfig = {
     offsite?: boolean;
   };
 };
+
+type OwnerInstallerConfig = {
+  promptOnFirstInstall: boolean;
+  telegramUserIdEnv: "PARAM_OWNER_TELEGRAM_USER_ID";
+};
+
+type RuntimeInstallerConfig = {
+  interactiveChecklist: boolean;
+  defaultSelected: ("codex" | "opencode" | "antigravity")[];
+  installIfMissing: boolean;
+  allowSkipCodex?: boolean;
+};
 ```
 
 The installer uses this as intent, but it must still confirm before overwriting
 existing service files or config.
+
+On first install, setup must collect the owner Telegram user id unless
+`PARAM_OWNER_TELEGRAM_USER_ID` is already provided. The owner id seeds the first
+trusted user and the default allowed DM user. Allowed groups are configured
+separately in `param.config.local.ts`.
+
+When `interactiveChecklist` is enabled and runtime flags are not provided, setup
+shows checkboxes for:
+
+```text
+[x] Codex CLI
+[x] OpenCode CLI
+[x] Antigravity CLI
+```
+
+The checklist controls installation/checking of host CLI runtimes. It does not
+grant tool permissions. Runtime tool access still goes through Runtime
+Adapters, Tool Registry, and Action Review.
 
 ## `.env.example`
 
@@ -1159,12 +1279,10 @@ DATABASE_URL=postgresql://param:replace_me@127.0.0.1:5432/param
 
 # Telegram
 TELEGRAM_BOT_TOKEN=replace_me
-PARAM_OWNER_TELEGRAM_USER_ID=replace_me
 
-# Models / providers
-OPENAI_API_KEY=replace_me
-ANTHROPIC_API_KEY=replace_me
-GOOGLE_API_KEY=replace_me
+# First trusted owner and default allowed DM user.
+# Setup should ask for this on first VPS install.
+PARAM_OWNER_TELEGRAM_USER_ID=replace_me
 
 # Optional runtime overrides
 CODEX_HOME=
@@ -1196,6 +1314,8 @@ Startup validation must fail when:
 
 - `DATABASE_URL` is missing or malformed
 - Telegram is enabled and no bot token is configured
+- Telegram is enabled and access rules allow no users, groups, or topics
+- production owner Telegram user id is missing on first install
 - production has no trusted user with `global` or `server_admin` scope
 - webhook mode is enabled without public URL or webhook secret
 - Mini Apps are enabled without public URL
@@ -1207,7 +1327,7 @@ Startup validation must fail when:
 
 Warnings are allowed when:
 
-- optional runtimes are disabled
+- optional target runtimes are unavailable or warning-only at startup
 - public URL is missing while no public features need it
 - ambient turns are disabled
 - memory retention is unset

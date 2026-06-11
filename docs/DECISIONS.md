@@ -79,6 +79,12 @@ in `BUILD_SPEC.md`.
 - Telegram reaction choices come from the chat's available reactions when
   present.
 - Reaction emoji limits apply only to `react_to_message`, not normal text.
+- Telegram access is restricted by config to allowed DM users, groups, and
+  topics.
+- Allowed DM users control private chats.
+- Allowed groups let everyone in that group talk with Param in that group
+  session.
+- Allowed chat access and trusted approval authority are separate concepts.
 
 ## Sessions
 
@@ -110,7 +116,12 @@ in `BUILD_SPEC.md`.
 - Runtime adapters target Codex, Antigravity, OpenCode, image generation,
   browser automation, and custom CLIs.
 - Detailed runtime-adapter behavior lives in `docs/RUNTIME_ADAPTERS.md`.
+- Codex CLI is the first/default main actor runtime because it can use the
+  existing Codex subscription path.
+- Direct paid API model calls are not part of the default runtime.
 - External agent CLIs always sit behind Param runtime adapters.
+- OpenCode and Antigravity are enabled target runtimes, but they can be
+  warning-only at startup while Codex is the first required actor runtime.
 - AI SDK community providers for Codex CLI or OpenCode are optional adapter
   implementation details, not Param's runtime boundary.
 - Runtime adapters stream structured events back to Param.
@@ -133,9 +144,11 @@ in `BUILD_SPEC.md`.
 - Detailed Action Review policy lives in `docs/ACTION_REVIEW.md`.
 - Auto command review runs for action requests in every chat and verifies sender
   id, trust scope, action target, risk, and policy.
-- In groups, change-making requests from non-trusted requesters tag everyone
-  from the configured trusted users list for that chat/scope in the same chat
-  for `approve` or `deny` replies.
+- In groups, change-making requests from non-trusted requesters ask trusted
+  approvers in the same chat/topic when such approvers are present.
+- If no trusted approver is present in that conversation, Param requests
+  approval by DM from configured trusted users and records the cross-session
+  approval link.
 - Trusted requesters in DMs or groups can have safe and policy-allowed actions
   run after auto review, within their trust scope.
 - Trusted users are configuration, not memory.
@@ -151,7 +164,8 @@ in `BUILD_SPEC.md`.
 - Language: TypeScript.
 - HTTP framework: Hono.
 - Default dependency choices live in `docs/DEPENDENCIES.md`.
-- Exact package versions are pinned in `package.json` and `bun.lockb`.
+- Exact installed package versions are recorded in the generated `bun.lock`.
+- Do not hand-write lockfiles or guess latest package versions in docs.
 - Config format: typed TypeScript config files for non-secret settings.
 - `param.config.ts` is committed with safe shared defaults.
 - `param.config.local.ts` is the per-instance editable config and is ignored by
@@ -163,7 +177,6 @@ in `BUILD_SPEC.md`.
 - Runtime validation uses Zod.
 - Hosting: Hetzner CX23 VPS.
 - Process model: native services.
-- Docker is not part of the target operating model.
 - Database default: local Postgres + pgvector on the VPS.
 - Managed Postgres remains a supported deployment option through
   `DATABASE_URL`.
@@ -179,6 +192,10 @@ in `BUILD_SPEC.md`.
 - Redis and dedicated vector DB are not part of the default design.
 - `dotenv` is not part of the default runtime because Bun loads `.env`
   automatically.
+- Installer prompts use `@clack/prompts` by default.
+- `@inquirer/prompts` is only a fallback if a prompt becomes awkward in Clack.
+- Ink is reserved for a future richer operator/admin terminal UI, not the
+  default installer.
 - Jest, Vitest, Next.js, Express, Fastify, Prisma, LangChain, and LlamaIndex
   are not part of the default design.
 - Temporal is not part of the core runtime.
@@ -228,8 +245,15 @@ in `BUILD_SPEC.md`.
 - Param needs an idempotent Linux install script for fresh machines.
 - The installer prepares dependencies, directories, environment placeholders,
   systemd services, health checks, and startup-on-boot.
+- The installer offers a runtime install checklist for Codex, OpenCode, and
+  Antigravity.
+- Codex, OpenCode, and Antigravity are selected by default in interactive
+  setup, while startup checks can still be `require` or `warn` per runtime.
 - The installer creates `param.config.local.ts` with empty documented overrides
   when missing.
+- The first VPS install configures one owner Telegram user id.
+- The owner id becomes the default allowed DM user and the first trusted owner.
+- Allowed groups are configured separately from trusted users.
 - The installer must not silently overwrite existing config, secrets, data, or
   service files.
 - Important state is persisted before action.

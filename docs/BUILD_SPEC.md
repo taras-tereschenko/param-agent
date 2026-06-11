@@ -1109,9 +1109,14 @@ verifies sender id, trust scope, action target, risk, and policy before deciding
 whether to run, ask for approval, or deny.
 
 In group chats, if the requester is not trusted for the action scope,
-change-making requests create an approval message in the same group that tags
-everyone from the configured trusted users list for that chat/scope. Trusted
-users approve or deny by replying to that approval message.
+change-making requests prefer an approval message in the same group/topic when
+a trusted approver is present there. The approval message tags trusted users
+from the configured trusted users list for that chat/scope who are present in
+that conversation.
+
+If no trusted approver is present in the group/topic, Param can request approval
+by DM from configured trusted users. The approval still records the source
+group/topic, requester, exact action, and approval id.
 
 If the requester is trusted for the action scope, whether in a DM or group, safe
 and policy-allowed actions can run after auto review. Destructive, server,
@@ -1284,10 +1289,22 @@ Use `.env` or secret references for:
 
 - Telegram bot token
 - database URL
-- model/API keys
+- optional model/API keys for future API-backed runtimes
 - Tailscale/admin tokens
 - runtime adapter credentials
 - webhook secrets
+
+Telegram access config is separate from trusted approval config:
+
+- `allowedPrivateUserIds` controls who can DM Param.
+- `allowedGroupChatIds` controls which groups Param can participate in.
+- `allowedTopicIds` optionally limits access to specific Telegram forum topics.
+- `trustedUsers` controls who can approve consequential actions.
+
+Allowed group access does not make everyone in that group trusted.
+
+The first VPS install collects one owner Telegram user id. That id becomes the
+default allowed DM user and the first trusted owner.
 
 The app should validate required `.env` values at startup and fail loudly when
 required secrets are missing or malformed.
@@ -1319,6 +1336,8 @@ Installer responsibilities:
 - create directories for config, data, logs, artifacts, and workspaces
 - install app dependencies
 - build or prepare the TypeScript app
+- collect the owner Telegram user id when missing
+- help discover Telegram owner/group ids when needed
 - create `param.config.local.ts` with empty documented overrides when missing
 - never overwrite an existing `param.config.local.ts`
 - create `.env` from `.env.example` when missing
@@ -1483,7 +1502,6 @@ TypeScript
 Hono HTTP surface
 Hetzner CX23 VPS
 Native services
-No Docker
 ```
 
 Use system services so Param starts on boot and restarts after crashes.
@@ -1525,7 +1543,7 @@ Boundaries:
 - audit records are append-only
 - emergency shutdown is available to trusted users
 
-Without Docker, task isolation relies on:
+Task isolation initially relies on:
 
 - per-task workspaces
 - filesystem path policies

@@ -151,6 +151,9 @@ Notes:
   permission-changed.
 - `chat_member` can be useful later for group membership and trusted-user
   context, but it should be enabled only when needed.
+- approval routing can also use exact chat-scoped trusted-user config and
+  recent `session_participants` records to decide whether a trusted approver is
+  present.
 
 The adapter should preserve unexpected update types as raw payloads when
 possible, even if Param does not act on them yet.
@@ -235,7 +238,8 @@ do not collapse into one group session.
 
 Cross-session links should be explicit:
 
-- approval in DM can approve a group request
+- DM approval can approve a group request only when no trusted approver is
+  present in that group/topic and policy routes approval to trusted DMs
 - task session reports to parent Telegram session
 - Mini App result belongs to parent Telegram session or UI session
 
@@ -446,12 +450,17 @@ Group action approvals should stay visible in the group by default.
 For non-trusted requester in a group:
 
 ```text
-1. Param posts approval request in the same group/topic.
-2. Approval message tags trusted users for that scope.
+1. If trusted approvers are present in the group/topic, Param posts approval
+   request in the same group/topic.
+2. Approval message tags trusted users for that scope who are present there.
 3. Trusted users reply approve/deny or press a validated button.
 4. Adapter maps the response to approval.response.
 5. Action Review verifies approver identity and exact action.
 ```
+
+If no trusted approver is present in the group/topic, the adapter can route the
+approval request to trusted users by DM. The approval response still records the
+source group/topic and approval id.
 
 Trusted users in DMs or groups can use auto-review paths within their trust
 scope, but risky actions can still require explicit confirmation.
@@ -507,6 +516,11 @@ Examples:
 /approve
 /deny
 ```
+
+Setup/discovery commands should be handled before normal actor routing when the
+installer is running Telegram id discovery. They should print exact `from.id`,
+`chat.id`, and `message_thread_id` values for configuration, then stop before
+normal services start.
 
 The adapter should map commands into events with `hasCommandLikeText`.
 
@@ -576,6 +590,8 @@ messages.
 Rules:
 
 - bot tokens live in `.env` or secret refs
+- disallowed users, groups, and topics are rejected by config before normal
+  session processing
 - raw Telegram payloads can contain personal data
 - raw payload access is admin/debug only
 - private DM data does not leak into groups
@@ -620,6 +636,9 @@ Relevant config:
 - delivery retry policy
 - Mini App public base URL
 - trusted users by Telegram id
+- allowed DM user ids
+- allowed group chat ids
+- allowed topic ids
 
 Detailed config shape lives in `docs/CONFIG.md`.
 

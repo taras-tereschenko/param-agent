@@ -205,16 +205,38 @@ Group approval behavior:
 
 ```text
 1. Param creates an approval request for the exact proposed action.
-2. Param posts an approval message in the same group.
+2. If trusted approvers are present in the same conversation, Param posts an
+   approval message in the same group/topic.
 3. The approval message tags everyone from the configured trusted users list for
-   that chat/scope.
+   that chat/scope who is present in the conversation.
 4. Trusted users can reply to that message with approve or deny.
 5. Ignoring the message leaves the request pending until it expires.
 6. Approved action resumes. Denied or expired action is cancelled.
 ```
 
-The group should see that approval is needed. Param should not silently DM
-approval away from the group by default.
+If no trusted approver is present in the conversation, Param can request
+approval by DM from configured trusted users. The DM approval request must
+include the source chat, requester, exact action, and approval id. The group
+request keeps a visible pending/approval-needed state unless policy says to
+stay quiet.
+
+Param should not silently DM approval away from the group when an in-chat
+trusted approver is available.
+
+For approval routing, a trusted approver counts as present in a group/topic
+when Param has enough mechanical evidence that the trusted user belongs to that
+conversation and can see the approval request.
+
+Valid evidence can include:
+
+- a chat-scoped trusted-user config for that exact group/topic
+- a recent `session_participants` record for that group/topic
+- a Telegram membership update showing the user is still in the chat
+
+If presence is unknown, Param should choose the safer configured route. The
+initial implementation can treat exact chat-scoped trusted users as present and
+use DM fallback for global/server-admin trusted users that have not been
+observed in the group/topic.
 
 Approval replies must target the approval message, or otherwise include an
 unambiguous approval id.

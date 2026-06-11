@@ -169,8 +169,9 @@ Relevant lessons:
 - Mock language and embedding models are useful for deterministic tests.
 - Stream simulation is useful for testing steering and partial-output behavior.
 - Telemetry should allow input/output recording to be disabled for privacy.
-- AI SDK provider packages include `@ai-sdk/openai`, `@ai-sdk/anthropic`, and
-  `@ai-sdk/google`.
+- AI SDK provider packages such as `@ai-sdk/openai`, `@ai-sdk/anthropic`, and
+  `@ai-sdk/google` are optional future API-runtime dependencies, not default
+  bootstrap packages.
 - AI SDK UI's React hooks live in `@ai-sdk/react`.
 - AI SDK lists community providers for Codex CLI and OpenCode.
 - The Codex CLI community provider does not support AI SDK custom tools;
@@ -178,8 +179,8 @@ Relevant lessons:
 - The OpenCode community provider also does not support AI SDK custom tools;
   OpenCode executes tools server-side.
 - No Antigravity CLI provider is part of Param's default AI SDK dependency set.
-- AI SDK is useful for direct model calls and generated structured data, but it
-  is not Param's runtime adapter boundary.
+- AI SDK can be useful for generated structured data, tests, telemetry, and
+  future API-backed runtimes, but it is not Param's runtime adapter boundary.
 
 ### MCP And Tool Calling
 
@@ -341,6 +342,32 @@ Relevant lessons:
 - Zod is TypeScript-first schema validation with static inference.
 - Zod supports JSON Schema conversion, which fits actor/tool/UI contracts.
 - Zod requires TypeScript strict mode.
+
+### Installer CLI UX
+
+Sources:
+
+- [Clack](https://bomb.sh/docs/clack/basics/getting-started/)
+- [Inquirer.js](https://github.com/SBoudrias/Inquirer.js)
+- [Ink](https://github.com/vadimdemedes/ink)
+- [Node util.parseArgs](https://nodejs.org/api/util.html#utilparseargsconfig)
+
+Relevant lessons:
+
+- Clack is the default installer prompt library because it covers the simple
+  guided setup flow Param needs: text, select, multiselect, confirm,
+  validation, and polished terminal presentation without a full-screen app.
+- Install Clack with `bun add @clack/prompts`.
+- Inquirer remains a good fallback for prompt shapes where Clack becomes
+  awkward.
+- Interactive prompts need a TTY; non-interactive runs must use flags or config
+  instead of prompts.
+- Ink is React for CLIs and is useful for component-based terminal apps with
+  richer layouts.
+- Ink is heavier than needed for a linear installer checklist, but it can be a
+  good future fit for an operator/admin TUI.
+- `util.parseArgs` is built into Node-compatible runtimes and is enough for
+  installer flags before Param needs a full CLI framework.
 
 ### Temporal And Effect
 

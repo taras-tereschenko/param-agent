@@ -414,7 +414,7 @@ Workspace rules:
 - secrets are injected only through approved runtime env
 - cleanup policy is explicit
 
-Without Docker, isolation relies on:
+Task isolation relies on:
 
 - per-task workspaces
 - filesystem path policies

@@ -3,7 +3,11 @@
 This file records the default package choices for Param.
 
 It is an ADR, not a lockfile. Exact versions belong in `package.json` and
-`bun.lockb`.
+the generated `bun.lock`.
+
+Do not hand-write the lockfile. Implementation should install packages with Bun,
+let the package manager resolve real versions from the registry, then commit the
+generated `bun.lock`.
 
 ## Goal
 
@@ -27,7 +31,7 @@ Hono
 Drizzle
 local Postgres + pgvector
 Vercel Chat SDK
-AI SDK
+Codex CLI runtime adapter
 MCP TypeScript SDK
 Zod
 ```
@@ -104,16 +108,21 @@ not use that fact as a reason to choose `pg` for its own database module.
 Add direct `pg` / `@types/pg` only if Param needs to pass a custom `pg.Pool`
 into Chat SDK state or integrate with a package that requires node-postgres.
 
-AI:
+AI SDK:
 
 ```text
 ai
-@ai-sdk/openai
 ```
 
-`ai` is the default direct model-call layer for actor calls, structured
-outputs, tool schemas, object generation, eval helpers, telemetry hooks, and
-generated UI data. `@ai-sdk/openai` is the first direct provider package.
+AI SDK is optional in the default build.
+
+Param starts with Codex CLI through the Codex runtime adapter because that uses
+the existing Codex subscription path. Param should not make direct paid API
+model calls by default.
+
+Add `ai` only when an implemented feature needs AI SDK primitives, such as
+structured object generation, telemetry helpers, generated UI data, eval
+helpers, or an adapter experiment.
 
 AI SDK is not Param's runtime adapter system. Codex, OpenCode, Antigravity, and
 other CLIs still sit behind `src/runtimes/` adapters because Param must control
@@ -126,9 +135,13 @@ runtime adapters, but they do not replace the adapters.
 Optional provider packages are added only when enabled in config:
 
 ```text
+@ai-sdk/openai
 @ai-sdk/anthropic
 @ai-sdk/google
 ```
+
+These provider packages are for a future explicit API-backed runtime. They are
+not bootstrap dependencies.
 
 Optional community provider packages are added only after adapter tests prove
 they preserve Param's runtime contract:
@@ -141,6 +154,42 @@ ai-sdk-provider-opencode-sdk
 There is no default AI SDK provider dependency for Antigravity CLI.
 
 Do not hardcode model ids in docs. Model choices belong in typed config.
+
+## CLI Runtime Installs
+
+Codex, OpenCode, and Antigravity are host CLI runtimes, not normal app package
+dependencies.
+
+Installer prompt UI:
+
+```text
+@clack/prompts
+```
+
+Use `@clack/prompts` for terminal prompts such as checkboxes, confirms,
+selects, and text inputs.
+
+Use `@inquirer/prompts` only as a fallback if a specific installer prompt
+becomes awkward in Clack.
+
+Use built-in `util.parseArgs` for CLI flags. Do not add a full CLI framework
+until the installer grows real subcommands.
+
+Ink is not part of the default installer dependency set. Add `ink` and `react`
+only if Param grows a richer operator/admin TUI. Do not use Ink just to ask
+checkbox questions during setup.
+
+The Linux installer should offer a checklist to install/check them:
+
+```text
+[x] Codex CLI
+[x] OpenCode CLI
+[x] Antigravity CLI
+```
+
+Exact install commands are implementation/runtime-installer data and must be
+verified against current official docs before use. Do not hide CLI installs
+inside `bun install`.
 
 MCP:
 
@@ -236,7 +285,6 @@ These are valid tools, but not part of the default stack:
 redis
 temporal
 effect
-docker
 prisma
 next
 express
@@ -254,7 +302,6 @@ Reasons:
 - Temporal is unnecessary until Param outgrows Postgres jobs and recovery
   workers.
 - Effect is unnecessary until code structure needs a full effect system.
-- Docker is not the target VPS operating model.
 - Prisma conflicts with the Drizzle decision.
 - Next.js is unnecessary because Param does not ship a standalone web app.
 - Express/Fastify duplicate Hono.

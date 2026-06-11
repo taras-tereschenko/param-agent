@@ -73,7 +73,7 @@ This order is about reducing risk, not limiting the final product.
 Create the runnable TypeScript/Bun project:
 
 - `package.json`
-- `bun.lockb`
+- generated `bun.lock`
 - `tsconfig.json`
 - `drizzle.config.ts`
 - `.env.example`
@@ -187,13 +187,14 @@ Acceptance check:
 incoming message -> actor job -> validated output -> delivery record
 ```
 
-### 7. Real Actor And Style Guard
+### 7. Codex Actor Runtime And Style Guard
 
 Add model-backed actor behavior:
 
-- AI SDK direct model calls
+- minimal Codex runtime adapter for main actor runs
 - prompt packet compiler
 - structured actor output
+- buffered Codex output capture
 - visible style guard
 - no-reply/reaction/reply/tool decision handling
 
@@ -202,6 +203,7 @@ Acceptance check:
 ```text
 actor can reply, react, stay quiet, and request a tool
 visible text follows Param voice rules
+Codex output is buffered before Telegram delivery
 ```
 
 ### 8. Action Review And Tools
@@ -241,13 +243,13 @@ group memory does not leak into private user memory
 latest messages survive compaction
 ```
 
-### 10. Runtime Adapters
+### 10. OpenCode And Antigravity Adapters
 
-Add external agent CLIs behind adapters:
+Complete the other enabled CLI runtimes after the Codex actor path works:
 
-- Codex adapter
 - OpenCode adapter
 - Antigravity adapter
+- fuller Codex coding/research task support
 - runtime event stream
 - artifact/log capture
 - cancellation or steering fallback
@@ -302,6 +304,7 @@ consequential callback goes through Action Review
 Make it survive a real VPS:
 
 - Linux install script
+- runtime install checklist for Codex, OpenCode, and Antigravity
 - local Postgres + pgvector setup
 - systemd services
 - health checks
@@ -313,6 +316,7 @@ Acceptance check:
 
 ```text
 fresh Linux host can install
+installer can checkbox-select CLI runtimes
 services start on boot
 worker recovers pending jobs after restart
 ```
@@ -326,7 +330,7 @@ worker recovers pending jobs after restart
 - Do not let runtime approval replace Param Action Review.
 - Do not store memory without retrieval.
 - Do not make Mini Apps before basic Telegram messages work.
-- Do not introduce Redis, Temporal, Effect, Docker, Next.js, Prisma, LangChain,
+- Do not introduce Redis, Temporal, Effect, Next.js, Prisma, LangChain,
   or a dedicated vector DB unless a new decision justifies it.
 
 ## When Lost

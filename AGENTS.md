@@ -26,7 +26,7 @@ Then read the subsystem docs named by the implementation guide.
 - Consequential actions go through Param Action Review.
 - Memory must be scoped and retrieved, not only stored.
 - Bun, TypeScript, Hono, Drizzle, Bun SQL, local Postgres, Zod, Chat SDK, MCP,
-  and AI SDK are the default stack.
+  and the Codex CLI runtime adapter are the default stack.
 
 ## Reference Repos
 

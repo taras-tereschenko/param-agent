@@ -96,7 +96,7 @@ type ActorRef =
     }
   | {
       kind: "param";
-      runtime?: "codex" | "opencode" | "antigravity" | "native" | string;
+      runtime?: "codex" | "opencode" | "antigravity" | "image" | "browser" | string;
     }
   | {
       kind: "task_agent";

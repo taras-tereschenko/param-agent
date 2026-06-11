@@ -56,7 +56,7 @@ Drizzle
 Bun SQL
 local Postgres + pgvector
 Vercel Chat SDK
-AI SDK
+Codex CLI runtime adapter
 MCP TypeScript SDK
 Zod
 ```

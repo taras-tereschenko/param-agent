@@ -23,7 +23,7 @@ Default package choices live in `docs/DEPENDENCIES.md`.
   tests/
   evals/
   package.json
-  bun.lockb
+  bun.lock
   tsconfig.json
   drizzle.config.ts
   param.config.ts
@@ -591,6 +591,9 @@ Do not turn `shared/` into a junk drawer.
 ```text
 scripts/
   install-linux.ts
+  installer-prompts.ts
+  runtime-install.ts
+  telegram-id-discovery.ts
   doctor.ts
   service-control.ts
   db-migrate.ts
@@ -602,6 +605,9 @@ scripts/
 Script responsibilities:
 
 - install dependencies on a fresh Linux host
+- install/check selected CLI runtimes from setup checklist
+- display installer prompts and checkboxes through `@clack/prompts`
+- help discover Telegram owner/group ids during setup
 - create directories and service user
 - create `.env` and `param.config.local.ts` if missing
 - install/configure local Postgres + pgvector
@@ -627,6 +633,13 @@ It should support:
 --skip-systemd
 --skip-postgres
 --create-local-config
+--owner-telegram-user-id <id>
+--discover-telegram-ids
+--runtime codex
+--runtime opencode
+--runtime antigravity
+--runtime all
+--runtime none
 --check
 ```
 
@@ -635,16 +648,19 @@ Installer phases:
 1. Detect OS and package manager.
 2. Verify Bun is installed or install it after approval.
 3. Install system packages.
-4. Create service user.
-5. Create directories.
-6. Create `.env` from `.env.example` if missing.
-7. Create `param.config.local.ts` if missing.
-8. Install/configure Postgres when using local mode.
-9. Enable pgvector.
-10. Run migrations.
-11. Install systemd services.
-12. Start services.
-13. Run doctor checks.
+4. Ask runtime install checklist unless runtime flags are provided.
+5. Install/check selected CLI runtimes.
+6. Create service user.
+7. Create directories.
+8. Collect owner Telegram user id when missing.
+9. Create `.env` from `.env.example` if missing.
+10. Create `param.config.local.ts` if missing.
+11. Install/configure Postgres when using local mode.
+12. Enable pgvector.
+13. Run migrations.
+14. Install systemd services.
+15. Start services.
+16. Run doctor checks.
 
 The installer should print an action plan before making changes.
 
