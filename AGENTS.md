@@ -28,6 +28,30 @@ Then read the subsystem docs named by the implementation guide.
 - Bun, TypeScript, Hono, Drizzle, Bun SQL, local Postgres, Zod, Chat SDK, MCP,
   and the Codex CLI runtime adapter are the default stack.
 
+## Official Setup Rule
+
+When adding or bootstrapping frameworks, runtimes, libraries, databases, or
+tooling, use the official setup path first.
+
+- Check the current official docs before choosing install or scaffold commands.
+- Prefer official CLIs and package-manager commands such as `bun create`,
+  `bun add`, and `bunx` when they exist.
+- If an official starter would overwrite or reshape this repo, run it in
+  `/private/tmp`, inspect the generated files, then adapt only the needed parts.
+- Prefer non-interactive official starter flags when available. For temporary
+  starters, run from `/private/tmp` with a relative target name so scaffold CLIs
+  do not trip over absolute-path behavior.
+- If the official docs say to create a config file manually, create it manually
+  and keep it close to the documented shape.
+- If a CLI cannot be used because it is interactive, unavailable, blocked by the
+  sandbox, or does not provide an init command, say so in the work summary and
+  follow the official manual setup docs instead.
+- Do not invent dependency versions or lockfiles. Install with Bun and let
+  `bun.lock` pin the resolved versions.
+- Use the official project CLI for follow-up operations. For example, Drizzle
+  schema changes should go through `bunx drizzle-kit generate`, `migrate`, or
+  `push` as appropriate after schema files exist.
+
 ## Reference Repos
 
 `references/hermes-agent` and `references/openclaw` are read-only references.

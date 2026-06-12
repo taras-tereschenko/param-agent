@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+param.config.local.ts
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+
