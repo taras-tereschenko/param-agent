@@ -52,6 +52,18 @@ tooling, use the official setup path first.
   schema changes should go through `bunx drizzle-kit generate`, `migrate`, or
   `push` as appropriate after schema files exist.
 
+## Pre-Commit Review Gate
+
+After implementing a feature and before committing it:
+
+- Run the normal deterministic checks for the touched subsystem.
+- Run at least two review subagents when subagent tooling is available.
+- Give each reviewer a distinct focus area so they do not duplicate each other.
+- Address actionable findings before committing.
+- Re-run relevant checks after fixes.
+- In the final work summary, mention the reviewers' focus areas, what they
+  found, and which checks passed.
+
 ## Reference Repos
 
 `references/hermes-agent` and `references/openclaw` are read-only references.

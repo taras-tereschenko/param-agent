@@ -616,7 +616,7 @@ Script responsibilities:
 - help discover Telegram owner/group ids during setup
 - create directories and service user/account
 - create `.env` and `param.config.local.ts` if missing
-- install/configure local Postgres + pgvector
+- install/configure local Postgres + pgcrypto + vector
 - run Drizzle migrations
 - install native service files
 - check health
@@ -680,7 +680,7 @@ Installer phases:
 9. Create `.env` from `.env.example` if missing.
 10. Create `param.config.local.ts` if missing.
 11. Install/configure Postgres when using local mode.
-12. Enable pgvector.
+12. Enable required Postgres extensions.
 13. Run migrations.
 14. Install native services.
 15. Start services.

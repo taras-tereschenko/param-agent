@@ -324,7 +324,8 @@ Target scripts for the first scaffold:
     "start:app": "bun run src/app/main.ts",
     "start:worker": "bun run src/worker/main.ts",
     "db:generate": "bunx drizzle-kit generate",
-    "db:migrate": "bunx drizzle-kit migrate",
+    "db:migrate": "bun scripts/db-migrate.ts",
+    "db:check": "bun scripts/db-check.ts",
     "doctor": "bun run scripts/doctor.ts",
     "install": "bun run scripts/install.ts"
   }

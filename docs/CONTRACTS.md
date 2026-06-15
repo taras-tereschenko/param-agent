@@ -36,7 +36,9 @@ type ApprovalId = Id;
 type OutputId = Id;
 ```
 
-Ids should be time-sortable where possible, such as UUIDv7 or ULID.
+Database row ids use native Postgres UUIDs. External references,
+idempotency keys, dedupe keys, platform ids, and portable contract aliases are
+strings at module boundaries.
 
 Timestamps should be ISO 8601 UTC strings.
 

@@ -9,8 +9,12 @@
     "start": "bun src/app/main.ts",
     "start:worker": "bun src/worker/main.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test ./tests/config.test.ts ./tests/setup.test.ts",
+    "test": "bun test ./tests/config.test.ts ./tests/setup.test.ts ./tests/db.test.ts",
     "check": "bun run typecheck && bun run test",
+    "db:generate": "bunx drizzle-kit generate",
+    "db:migrate": "bun scripts/db-migrate.ts",
+    "db:check": "bun scripts/db-check.ts",
+    "test:db": "bun test ./tests/db.integration.test.ts",
     "setup": "bun scripts/setup.ts",
     "doctor": "bun scripts/doctor.ts",
     "create-local-config": "bun scripts/create-local-config.ts"

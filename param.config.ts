@@ -26,7 +26,7 @@ export default defineParamConfig({
       serviceName: "postgresql",
       database: "param",
       user: "param",
-      extensions: ["vector"],
+      extensions: ["pgcrypto", "vector"],
       backupDir: "/var/lib/param-agent/backups/postgres",
     },
   },

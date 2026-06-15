@@ -195,7 +195,7 @@ export default defineParamConfig({
       serviceName: "postgresql",
       database: "param",
       user: "param",
-      extensions: ["vector"],
+      extensions: ["pgcrypto", "vector"],
       backupDir: "/var/lib/param-agent/backups/postgres",
     },
   },
@@ -573,14 +573,14 @@ type DatabaseConfig = {
 };
 ```
 
-The database must support pgvector.
+The database must support generated UUIDs and pgvector.
 
 Default VPS install:
 
 ```text
 provider: local
 provisioningMode: local-postgres
-extensions: ["vector"]
+extensions: ["pgcrypto", "vector"]
 ```
 
 Managed Postgres remains supported by setting `DATABASE_URL` and using

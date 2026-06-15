@@ -224,13 +224,13 @@ local-postgres
 Required extension:
 
 ```sql
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-Recommended extensions:
+Optional future extension:
 
 ```sql
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS btree_gin;
 ```
 
@@ -244,7 +244,7 @@ The installer should:
 - write `DATABASE_URL`
 - run Drizzle migrations
 - verify a simple connection
-- verify pgvector is available
+- verify required extensions are available
 
 ## Postgres Tuning
 
@@ -798,7 +798,7 @@ Health checks should cover:
 - app process alive
 - worker process alive
 - Postgres connection
-- pgvector extension available
+- required Postgres extensions available
 - migration state
 - Telegram polling freshness
 - queue backlog
@@ -874,7 +874,7 @@ Ops tests should cover:
 
 - installer dry-run does not change files
 - installer creates missing local config without overwriting existing files
-- local Postgres mode creates/validates pgvector extension
+- local Postgres mode creates/validates required extensions
 - managed `DATABASE_URL` mode skips local Postgres provisioning
 - Linux systemd templates include restart policy
 - macOS launchd templates include keep-alive behavior

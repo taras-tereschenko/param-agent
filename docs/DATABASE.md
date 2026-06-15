@@ -17,12 +17,15 @@ tables should become Drizzle schema definitions plus migrations.
   metadata.
 - Important JSONB payloads still need Zod validation before write and after
   read.
-- Use UUIDv7 or ULID-style ids so records sort naturally by time.
+- Use native Postgres `uuid` primary keys for database rows in the initial
+  implementation.
 - Use `timestamptz` for timestamps.
 - Use `jsonb` for `ParamEvent.payload`, `ActorOutput.payload`, refs, and raw
   payloads.
 - Use `pgvector` for embeddings inside memory tables.
 - Use Postgres full-text search for keyword retrieval.
+- Do not add broad JSONB GIN indexes by default. Add targeted JSONB indexes
+  only after a real query needs them.
 - Do not put large generated artifacts directly in Postgres.
 
 Large files stay on the VPS filesystem or later object storage. Postgres stores
@@ -33,18 +36,19 @@ paths, hashes, ownership, retention, and audit links.
 Required:
 
 ```sql
-pgvector
+pgcrypto
+vector
 ```
 
-Recommended:
+Optional for future mixed JSONB/search indexes:
 
 ```sql
-pgcrypto
 btree_gin
 ```
 
-`pgcrypto` is useful for generated ids and hashes. `btree_gin` is useful for
-mixed JSONB/search indexes.
+`pgcrypto` backs generated UUID primary keys. `btree_gin` is useful later for
+mixed JSONB/search indexes, but it is not required by the database foundation
+migration.
 
 ## Naming
 
@@ -53,10 +57,11 @@ Table names use snake_case.
 Primary keys:
 
 ```text
-id text primary key
+id uuid primary key default gen_random_uuid()
 ```
 
-This keeps ids portable across Drizzle, logs, JSON, and external references.
+This keeps ids native to Postgres and Drizzle. Dedupe keys, idempotency keys,
+platform ids, and external references remain `text`.
 
 Common columns:
 
@@ -304,7 +309,6 @@ events(actor_run_id)
 events(job_id)
 events(approval_id)
 events(correlation_id)
-events using gin(payload)
 ```
 
 Rules:
@@ -1249,31 +1253,34 @@ Each store should validate inputs with the contract schemas before writing.
 
 ## First Migration Shape
 
-The first migration should create:
+The database foundation migration creates:
 
-- extensions
 - identity tables
 - channel/session tables
 - events
+- raw_payloads
 - actor_runs
 - actor_outputs
+- delivery_attempts
 - jobs
+- audit_log
+
+Required extensions are ensured by `bun run db:migrate` before Drizzle applies
+generated migrations.
+
+Later migrations add:
+
 - approvals
 - schedules
 - memory_records
 - memory_candidates
 - summaries
-- audit_log
-
-Secondary migrations can add:
-
 - task agent tables
 - tool call tables
 - artifacts
-- raw payloads
-- delivery attempts
 - memory links
 - config overrides
 
 This order gives Param reboot survival, event durability, actor state,
-approvals, scheduling, and memory early.
+raw payload storage, delivery tracking, jobs, and auditability before the
+higher-level actor, memory, approval, and scheduler layers land.
