@@ -108,7 +108,14 @@ export default defineParamConfig({
     },
   },
   installer: {
-    systemd: true,
+    hosts: {
+      supported: ["linux", "macos", "windows"],
+      serviceManagers: {
+        linux: "systemd",
+        macos: "launchd",
+        windows: "windows-service",
+      },
+    },
     serviceUser: "param",
     db: "local-postgres",
     owner: {
@@ -122,4 +129,3 @@ export default defineParamConfig({
     },
   },
 });
-

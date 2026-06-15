@@ -246,7 +246,7 @@ packages.*
   package installs and updates
 
 service.*
-  restart/reload/status for systemd services
+  restart/reload/status for native host services
 
 telegram.*
   send, react, upload, callback, Mini App launch
@@ -308,7 +308,7 @@ File writes should record:
 
 ## Server Self-Management
 
-Param can manage itself and the VPS through tools.
+Param can manage itself and the host through tools.
 
 Examples:
 

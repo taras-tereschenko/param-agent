@@ -403,7 +403,7 @@ Review must include:
 - files or services affected
 - whether state is persisted first
 - rollback or recovery plan when possible
-- whether systemd will bring Param back after restart
+- whether the native service manager will bring Param back after restart
 
 Before Param restarts itself:
 

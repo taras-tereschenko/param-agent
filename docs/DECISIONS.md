@@ -175,9 +175,13 @@ in `BUILD_SPEC.md`.
 - `.env.example` documents all expected environment variables with safe
   placeholders.
 - Runtime validation uses Zod.
-- Hosting: Hetzner CX23 VPS.
-- Process model: native services.
-- Database default: local Postgres + pgvector on the VPS.
+- Supported hosts: Linux, macOS, and Windows.
+- First production host: Hetzner CX23 VPS on Linux.
+- Process model: native services on each host.
+- Linux service manager: systemd.
+- macOS service manager: launchd.
+- Windows service manager: Windows Service.
+- Database default: local Postgres + pgvector on the host.
 - Managed Postgres remains a supported deployment option through
   `DATABASE_URL`.
 - ORM/query layer: Drizzle.
@@ -242,9 +246,11 @@ in `BUILD_SPEC.md`.
 
 - Detailed operations behavior lives in `docs/OPS.md`.
 - Param must survive reboots.
-- Param needs an idempotent Linux install script for fresh machines.
-- The installer prepares dependencies, directories, environment placeholders,
-  systemd services, health checks, and startup-on-boot.
+- Param needs idempotent host installers for Linux, macOS, and Windows.
+- The shared installer flow prepares dependencies, directories, environment
+  placeholders, native service files, health checks, and startup-on-boot.
+- Platform-specific host adapters own OS package managers, service managers,
+  paths, users/accounts, permissions, and shell differences.
 - The installer offers a runtime install checklist for Codex, OpenCode, and
   Antigravity.
 - Codex, OpenCode, and Antigravity are selected by default in interactive

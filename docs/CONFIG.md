@@ -491,7 +491,14 @@ export default defineParamConfig({
   },
 
   installer: {
-    systemd: true,
+    hosts: {
+      supported: ["linux", "macos", "windows"],
+      serviceManagers: {
+        linux: "systemd",
+        macos: "launchd",
+        windows: "windows-service",
+      },
+    },
     serviceUser: "param",
     runtimes: {
       interactiveChecklist: true,
@@ -1209,7 +1216,14 @@ Installer script layout lives in `docs/PROJECT_STRUCTURE.md`.
 
 ```ts
 type InstallerConfig = {
-  systemd: boolean;
+  hosts: {
+    supported: Array<"linux" | "macos" | "windows">;
+    serviceManagers: {
+      linux: "systemd" | "manual";
+      macos: "launchd" | "manual";
+      windows: "windows-service" | "manual";
+    };
+  };
   serviceUser: string;
   db: "local-postgres" | "existing-url" | "managed-neon" | "managed-supabase";
   dryRunDefault?: boolean;

@@ -36,6 +36,8 @@ const cliRuntimeSchema = z.object({
   startupCheck: z.enum(["require", "warn", "skip"]).optional(),
 });
 
+const hostPlatformSchema = z.enum(["linux", "macos", "windows"]);
+
 export const paramConfigSchema = z.object({
   app: z.object({
     name: z.string().min(1),
@@ -139,7 +141,14 @@ export const paramConfigSchema = z.object({
     }),
   }),
   installer: z.object({
-    systemd: z.boolean(),
+    hosts: z.object({
+      supported: z.array(hostPlatformSchema).min(1),
+      serviceManagers: z.object({
+        linux: z.enum(["systemd", "manual"]),
+        macos: z.enum(["launchd", "manual"]),
+        windows: z.enum(["windows-service", "manual"]),
+      }),
+    }),
     serviceUser: z.string().min(1),
     db: z.enum([
       "local-postgres",
@@ -169,10 +178,11 @@ export type ParamConfig = z.infer<typeof paramConfigSchema>;
 export type ParamConfigOverride = DeepPartial<ParamConfig>;
 
 type DeepPartial<T> = {
-  [K in keyof T]?: T[K] extends Array<infer U>
-    ? Array<DeepPartial<U>>
-    : T[K] extends object
-      ? DeepPartial<T[K]>
-      : T[K];
+  [K in keyof T]?: DeepPartialValue<T[K]>;
 };
 
+type DeepPartialValue<T> = T extends Array<infer U>
+  ? Array<DeepPartialValue<U>>
+  : T extends object
+    ? DeepPartial<T>
+    : T;

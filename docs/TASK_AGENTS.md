@@ -560,7 +560,7 @@ Server-changing work requires Action Review and usually trusted approval:
 - restart services
 - edit config
 - install packages
-- change systemd units
+- change native service definitions
 - rotate secrets
 - alter firewall or network exposure
 - delete logs/data

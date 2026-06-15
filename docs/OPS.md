@@ -1,6 +1,6 @@
 # Param Agent Operations
 
-This file defines how Param runs on a VPS.
+This file defines how Param runs on native hosts.
 
 Core principle:
 
@@ -12,9 +12,10 @@ Param must survive reboots, crashes, and its own maintenance actions.
 
 Operations covers the boring machinery that keeps Param online:
 
-- Linux install script
+- cross-platform setup flow
+- Linux, macOS, and Windows install adapters
 - local Postgres + pgvector
-- systemd services
+- native services
 - directory layout
 - `.env` and config files
 - health checks
@@ -25,21 +26,47 @@ Operations covers the boring machinery that keeps Param online:
 - worker/job recovery
 - safe self-management
 
-The target host is a Hetzner CX23 VPS running native Linux services.
+Linux, macOS, and Windows are first-class supported hosts.
+
+The first production target is still a Hetzner CX23 VPS on Linux. macOS and
+Windows support should be real, not an afterthought: the shared runtime and
+installer should stay portable, while OS-specific install logic lives behind
+host adapters.
 
 ## Operating Model
 
-Default deployment:
+Shared runtime:
 
 ```text
-Hetzner CX23 VPS
 Bun
 TypeScript
 Hono
 local Postgres + pgvector
-systemd services
 Telegram long polling
 Tailscale for private admin access
+```
+
+Host-specific service managers:
+
+```text
+Linux
+  systemd
+
+macOS
+  launchd
+
+Windows
+  Windows Service
+```
+
+Default production deployment:
+
+```text
+Hetzner CX23 VPS
+Linux
+systemd services
+local Postgres + pgvector
+Telegram long polling
 ```
 
 Public HTTPS is optional for the core bot.
@@ -59,14 +86,14 @@ Param should run as native services.
 Initial services:
 
 ```text
-param-app.service
+param-app
   Hono HTTP/API surface, health checks, operator routes, Chat SDK/webhook handling
 
-param-worker.service
+param-worker
   jobs, actor runs, Telegram polling, scheduler, memory review, compaction,
   task agents, delivery retries
 
-postgresql.service
+postgres
   local Postgres with pgvector
 ```
 
@@ -76,18 +103,38 @@ Reasons:
 
 - the HTTP surface can stay responsive while workers are busy
 - worker crashes do not necessarily take down health/operator routes
-- systemd can restart each process independently
+- the host service manager can restart each process independently
 - logs are easier to inspect
 
-## Service User
+Native service mapping:
 
-Default service user:
+```text
+Linux
+  param-app.service
+  param-worker.service
+  postgresql.service
+
+macOS
+  com.param-agent.app.plist
+  com.param-agent.worker.plist
+  Postgres from the selected package manager/service provider
+
+Windows
+  Param Agent App service
+  Param Agent Worker service
+  PostgreSQL service
+```
+
+## Service Account
+
+Default service account:
 
 ```text
 param
 ```
 
-The installer should create the user if missing.
+The installer should create or configure the service account when the host
+supports that safely.
 
 Rules:
 
@@ -97,11 +144,20 @@ Rules:
 - keep runtime workspaces writable by the Param service user
 - keep system config changes behind Action Review
 
+Platform notes:
+
+- Linux uses a dedicated `param` system user by default.
+- macOS can run launchd agents as the installing user for local installs, or a
+  launch daemon with a dedicated user for server-style installs.
+- Windows uses a Windows Service account. The initial implementation may use the
+  current user for local development and a dedicated service account for
+  production installs.
+
 ## Directory Layout
 
 Repository and source layout lives in `docs/PROJECT_STRUCTURE.md`.
 
-Default paths:
+Linux production paths:
 
 ```text
 /opt/param-agent
@@ -128,6 +184,30 @@ Default paths:
 /var/log/param-agent
   application logs, if not using journald only
 ```
+
+macOS local paths:
+
+```text
+~/Library/Application Support/Param Agent
+  durable app data, workspaces, artifacts
+
+~/Library/Logs/Param Agent
+  local logs
+```
+
+Windows local paths:
+
+```text
+%LOCALAPPDATA%\Param Agent\Data
+  durable app data, workspaces, artifacts
+
+%LOCALAPPDATA%\Param Agent\Logs
+  local logs
+```
+
+`scripts/setup.ts` should generate OS-appropriate local paths in
+`param.config.local.ts`. Production installers can choose service-style paths
+for each OS.
 
 Postgres stores metadata, events, jobs, and memory.
 
@@ -224,13 +304,13 @@ compatible Postgres provider.
 
 ## Installer
 
-Param needs an idempotent Linux installer.
+Param needs an idempotent cross-platform installer.
 
 Installer script layout lives in `docs/PROJECT_STRUCTURE.md`.
 
 Installer goals:
 
-- prepare a fresh VPS
+- prepare a fresh or existing supported host
 - avoid overwriting existing state
 - support dry-run/check mode
 - print clear next steps
@@ -238,7 +318,7 @@ Installer goals:
 
 Installer responsibilities:
 
-- detect Linux distribution and architecture
+- detect host OS, distribution/version, architecture, shell, and package manager
 - install Bun
 - install Git and build tools
 - install Postgres and pgvector for `local-postgres`
@@ -253,7 +333,7 @@ Installer responsibilities:
 - help discover Telegram owner/group ids when needed
 - create `.env` from `.env.example` when missing
 - create `param.config.local.ts` when missing
-- create systemd service files
+- create native service files for the host
 - run migrations
 - enable and start services
 - run health checks
@@ -489,6 +569,18 @@ The installer creates `.env` from `.env.example` if missing.
 
 Startup should print a redacted config summary.
 
+Setup-created `.env` files should be treated as secret files:
+
+- write values with quoting/escaping so special characters do not break env
+  parsing
+- on Linux and macOS, create `.env` exclusively with `0600` permissions
+- on Windows local setup, create `.env` in the current user's project directory
+  using the current user's default file ACL
+- on Windows service installs, the host adapter must set an explicit ACL that
+  grants access only to the configured service account and trusted admins
+- never silently rewrite or chmod an existing `.env`; report that it already
+  exists and leave it alone
+
 Never print:
 
 - bot tokens
@@ -498,19 +590,19 @@ Never print:
 - Tailscale/admin tokens
 - runtime credentials
 
-## Systemd Services
+## Native Services
 
-Service files should:
+All native service definitions should:
 
-- run as the Param service user
+- run as the Param service account
 - load `.env`
 - set working directory
 - restart on failure
-- start after network and Postgres
-- write logs to journald
+- start after network and Postgres when the host manager supports dependencies
+- write logs through the host's normal service logging path
 - use conservative restart limits
 
-Example shape:
+Linux systemd example shape:
 
 ```text
 [Service]
@@ -527,6 +619,25 @@ RestartSec=5
 ```text
 ExecStart=/usr/local/bin/bun run src/worker/main.ts
 ```
+
+macOS launchd plist files should:
+
+- use `ProgramArguments` for Bun and the Param entrypoint
+- set `WorkingDirectory`
+- set environment variables or point to generated env loading wrapper scripts
+- use `KeepAlive` for long-running services
+- write stdout/stderr to the configured log directory
+- run as a launch agent for local installs or launch daemon for server-style
+  installs
+
+Windows service definitions should:
+
+- use the selected Windows service wrapper or service API implementation
+- set working directory
+- pass environment values from `.env` or generated service environment config
+- restart on failure
+- write logs to files and/or Windows Event Log
+- run as the configured service account
 
 Exact service files belong in implementation, not this spec.
 
@@ -636,7 +747,7 @@ Local Postgres needs backups from day one.
 Minimum backup plan:
 
 - scheduled `pg_dump`
-- write to `/var/lib/param-agent/backups/postgres`
+- write to the configured host backup directory
 - keep several recent backups
 - verify backup command succeeds
 - alert trusted/admin session on backup failure
@@ -720,7 +831,7 @@ Change-making examples:
 - run migration
 - install package
 - rotate token
-- change systemd unit
+- change native service definition
 - modify firewall
 
 Change-making actions require Action Review and usually trusted approval.
@@ -728,7 +839,7 @@ Change-making actions require Action Review and usually trusted approval.
 Before Param restarts itself:
 
 - persist current state
-- verify systemd will bring it back
+- verify the native service manager will bring it back
 - record restart reason
 - avoid interrupting an unsafe operation
 - notify a trusted/admin session when useful
@@ -765,7 +876,9 @@ Ops tests should cover:
 - installer creates missing local config without overwriting existing files
 - local Postgres mode creates/validates pgvector extension
 - managed `DATABASE_URL` mode skips local Postgres provisioning
-- systemd unit templates include restart policy
+- Linux systemd templates include restart policy
+- macOS launchd templates include keep-alive behavior
+- Windows service templates include restart policy
 - startup fails loudly on missing required secrets
 - recovery reclaims expired job locks
 - recovery does not duplicate delivered messages

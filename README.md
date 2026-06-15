@@ -6,6 +6,10 @@ The first target is Telegram. The long-term shape supports more communication
 channels, persistent memory, task agents, generated UI, runtime adapters for
 agent CLIs, and reviewed server self-management.
 
+Param is intended to run natively on Linux, macOS, and Windows. The first
+production target is still a Linux VPS, but local setup and host-install design
+should stay cross-platform from the start.
+
 Param should feel like a regular friend in a chat, not a command bot or a
 helpful-assistant helpdesk.
 
@@ -34,7 +38,18 @@ Load only the subsystem docs needed for the current change.
 
 ## Current State
 
-This repo currently contains architecture and implementation-planning docs.
+This repo currently contains architecture docs plus the first runnable Bun /
+TypeScript scaffold:
+
+```text
+bun run setup
+bun run doctor
+bun run check
+```
+
+`setup` creates missing local `.env` and `param.config.local.ts` files.
+`doctor` prints the effective config in redacted form.
+`check` runs typecheck and tests.
 
 The referenced systems live in:
 

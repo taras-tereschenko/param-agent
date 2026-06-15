@@ -9,8 +9,9 @@
     "start": "bun src/app/main.ts",
     "start:worker": "bun src/worker/main.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test ./tests/config.test.ts",
+    "test": "bun test ./tests/config.test.ts ./tests/setup.test.ts",
     "check": "bun run typecheck && bun run test",
+    "setup": "bun scripts/setup.ts",
     "doctor": "bun scripts/doctor.ts",
     "create-local-config": "bun scripts/create-local-config.ts"
   },

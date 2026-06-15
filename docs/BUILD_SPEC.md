@@ -1303,7 +1303,7 @@ Telegram access config is separate from trusted approval config:
 
 Allowed group access does not make everyone in that group trusted.
 
-The first VPS install collects one owner Telegram user id. That id becomes the
+The first install collects one owner Telegram user id. That id becomes the
 default allowed DM user and the first trusted owner.
 
 The app should validate required `.env` values at startup and fail loudly when
@@ -1321,18 +1321,19 @@ users, server behavior, secrets, or memory policy require Action Review.
 Detailed operations behavior lives in `docs/OPS.md`.
 Repository layout and installer script shape live in `docs/PROJECT_STRUCTURE.md`.
 
-Param needs an install script for a fresh Linux machine.
+Param needs an install flow for fresh or existing Linux, macOS, and Windows
+hosts.
 
 The installer should prepare the machine to run Param as an always-online
 service.
 
 Installer responsibilities:
 
-- detect Linux distribution and architecture
+- detect host OS, version, architecture, shell, and package manager
 - install Bun
 - install system packages needed by runtime adapters
 - install Git and build tools
-- create the Param service user or choose the current user deliberately
+- create the Param service user/account or choose the current user deliberately
 - create directories for config, data, logs, artifacts, and workspaces
 - install app dependencies
 - build or prepare the TypeScript app
@@ -1342,7 +1343,7 @@ Installer responsibilities:
 - never overwrite an existing `param.config.local.ts`
 - create `.env` from `.env.example` when missing
 - never overwrite an existing `.env`
-- create systemd service files
+- create native service files
 - enable service startup on boot
 - run health checks
 - print next required manual steps
@@ -1353,17 +1354,19 @@ the installation, not corrupt it.
 The installer should not silently overwrite existing config, secrets, data, or
 service files. Risky changes require explicit confirmation.
 
-Linux service shape:
+Native service shape:
 
 ```text
-param-app.service
+param-app
   HTTP/API surface and Chat SDK integration
 
-param-worker.service
+param-worker
   jobs, actor runs, memory review, compaction, task agents
 ```
 
-Both services should restart after crashes and start after reboot.
+Linux maps those to systemd units, macOS maps them to launchd plists, and
+Windows maps them to Windows services. Both Param services should restart after
+crashes and start after reboot.
 
 The installer should support a dry-run/check mode that reports what would be
 changed.
@@ -1506,7 +1509,7 @@ Native services
 
 Use system services so Param starts on boot and restarts after crashes.
 
-The Linux installer creates and enables those system services.
+Host installers create and enable those native services.
 
 The HTTP surface exists for health checks, external webhooks, callbacks, Mini
 Apps, and optional internal operator endpoints. Telegram polling does not

@@ -590,7 +590,12 @@ Do not turn `shared/` into a junk drawer.
 
 ```text
 scripts/
-  install-linux.ts
+  setup.ts
+  install.ts
+  install/
+    linux.ts
+    macos.ts
+    windows.ts
   installer-prompts.ts
   runtime-install.ts
   telegram-id-discovery.ts
@@ -604,24 +609,42 @@ scripts/
 
 Script responsibilities:
 
-- install dependencies on a fresh Linux host
+- run the first local setup pass through `scripts/setup.ts`
+- install dependencies on fresh or existing Linux, macOS, and Windows hosts
 - install/check selected CLI runtimes from setup checklist
 - display installer prompts and checkboxes through `@clack/prompts`
 - help discover Telegram owner/group ids during setup
-- create directories and service user
+- create directories and service user/account
 - create `.env` and `param.config.local.ts` if missing
 - install/configure local Postgres + pgvector
 - run Drizzle migrations
-- install systemd service files
+- install native service files
 - check health
 - manage safe service operations
 
 Scripts should be idempotent. They must not silently overwrite data, secrets,
 service files, or local config.
 
+`scripts/setup.ts` is the early interactive local setup entrypoint. It creates
+missing `.env` and `param.config.local.ts` files and checks selected runtimes.
+It does not install Linux packages, create service users, configure Postgres, or
+write native service files.
+
 ## Install Script Contract
 
-`scripts/install-linux.ts` is the main installer.
+`scripts/install.ts` is the main installer entrypoint.
+
+Host-specific behavior lives under:
+
+```text
+scripts/install/linux.ts
+scripts/install/macos.ts
+scripts/install/windows.ts
+```
+
+The shared installer owns prompts, flags, action planning, validation, and
+idempotency rules. Host adapters own package managers, service managers, path
+conventions, shell differences, service accounts, and OS-specific commands.
 
 It should support:
 
@@ -631,6 +654,7 @@ It should support:
 --mode local-postgres
 --mode existing-url
 --skip-systemd
+--skip-service
 --skip-postgres
 --create-local-config
 --owner-telegram-user-id <id>
@@ -645,12 +669,12 @@ It should support:
 
 Installer phases:
 
-1. Detect OS and package manager.
+1. Detect OS, version, architecture, shell, and package manager.
 2. Verify Bun is installed or install it after approval.
 3. Install system packages.
 4. Ask runtime install checklist unless runtime flags are provided.
 5. Install/check selected CLI runtimes.
-6. Create service user.
+6. Create service user/account if needed.
 7. Create directories.
 8. Collect owner Telegram user id when missing.
 9. Create `.env` from `.env.example` if missing.
@@ -658,7 +682,7 @@ Installer phases:
 11. Install/configure Postgres when using local mode.
 12. Enable pgvector.
 13. Run migrations.
-14. Install systemd services.
+14. Install native services.
 15. Start services.
 16. Run doctor checks.
 

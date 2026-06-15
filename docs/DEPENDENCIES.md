@@ -179,7 +179,8 @@ Ink is not part of the default installer dependency set. Add `ink` and `react`
 only if Param grows a richer operator/admin TUI. Do not use Ink just to ask
 checkbox questions during setup.
 
-The Linux installer should offer a checklist to install/check them:
+The installer should offer a checklist to install/check them on Linux, macOS,
+and Windows:
 
 ```text
 [x] Codex CLI
@@ -325,7 +326,7 @@ Target scripts for the first scaffold:
     "db:generate": "bunx drizzle-kit generate",
     "db:migrate": "bunx drizzle-kit migrate",
     "doctor": "bun run scripts/doctor.ts",
-    "install:linux": "bun run scripts/install-linux.ts"
+    "install": "bun run scripts/install.ts"
   }
 }
 ```

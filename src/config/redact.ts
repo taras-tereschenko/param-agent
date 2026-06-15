@@ -1,7 +1,20 @@
-const REDACTED = "env:<redacted>";
+const ENV_REDACTED = "env:<redacted>";
+const FILE_REDACTED = "file:<redacted>";
+const KEY_REDACTED = "key:<redacted>";
 
-export function redactConfig<T>(config: T): T {
-  return redactValue(config) as T;
+export type Redacted<T> =
+  T extends readonly (infer U)[] ? Redacted<U>[]
+  : T extends { env: string } ? { env: typeof ENV_REDACTED }
+  : T extends { file: string } ? { file: typeof FILE_REDACTED }
+  : T extends { provider: infer P extends string; key: string } ? {
+      provider: P;
+      key: typeof KEY_REDACTED;
+    }
+  : T extends object ? { [K in keyof T]: Redacted<T[K]> }
+  : T;
+
+export function redactConfig<T>(config: T): Redacted<T> {
+  return redactValue(config) as Redacted<T>;
 }
 
 function redactValue(value: unknown): unknown {
@@ -11,15 +24,15 @@ function redactValue(value: unknown): unknown {
 
   if (isRecord(value)) {
     if (typeof value.env === "string") {
-      return { env: REDACTED };
+      return { env: ENV_REDACTED };
     }
 
     if (typeof value.file === "string") {
-      return { file: "file:<redacted>" };
+      return { file: FILE_REDACTED };
     }
 
     if (typeof value.provider === "string" && typeof value.key === "string") {
-      return { provider: value.provider, key: "key:<redacted>" };
+      return { provider: value.provider, key: KEY_REDACTED };
     }
 
     return Object.fromEntries(
@@ -33,4 +46,3 @@ function redactValue(value: unknown): unknown {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
-

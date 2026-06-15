@@ -301,12 +301,13 @@ consequential callback goes through Action Review
 
 ### 13. Installer And Operations
 
-Make it survive a real VPS:
+Make it survive native hosts:
 
-- Linux install script
+- shared installer entrypoint
+- Linux, macOS, and Windows host adapters
 - runtime install checklist for Codex, OpenCode, and Antigravity
 - local Postgres + pgvector setup
-- systemd services
+- native service files
 - health checks
 - backups
 - log inspection
@@ -315,7 +316,7 @@ Make it survive a real VPS:
 Acceptance check:
 
 ```text
-fresh Linux host can install
+fresh Linux, macOS, and Windows hosts can install or dry-run the host plan
 installer can checkbox-select CLI runtimes
 services start on boot
 worker recovers pending jobs after restart

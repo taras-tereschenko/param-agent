@@ -25,13 +25,20 @@ async function loadLocalConfig(): Promise<ParamConfigOverride | undefined> {
   return module.default;
 }
 
-function mergeConfig<T>(base: T, override: ParamConfigOverride): T {
-  return deepMerge(base, override) as T;
+export function mergeConfig(
+  base: ParamConfig,
+  override: ParamConfigOverride,
+): ParamConfig {
+  return deepMerge(base, override) as ParamConfig;
 }
 
 function deepMerge(base: unknown, override: unknown): unknown {
   if (Array.isArray(base) || Array.isArray(override)) {
     return override ?? base;
+  }
+
+  if (isSecretRefRecord(override)) {
+    return override;
   }
 
   if (isRecord(base) && isRecord(override)) {
@@ -51,3 +58,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isSecretRefRecord(value: unknown) {
+  return (
+    isRecord(value) &&
+    (typeof value.env === "string" ||
+      typeof value.file === "string" ||
+      (typeof value.provider === "string" && typeof value.key === "string"))
+  );
+}
