@@ -1,79 +1,34 @@
-# Param Agent
+# Param
 
-Param is an always-online ambient chat agent.
+Param is an ambient Telegram-first chat friend built on Eve.
 
-The first target is Telegram. The long-term shape supports more communication
-channels, persistent memory, task agents, generated UI, runtime adapters for
-agent CLIs, and reviewed server self-management.
+He is not a helpful assistant. He should feel like a real participant in chats:
+casual, concise, witty, sometimes sarcastic, able to reply, react, stay quiet,
+remember, use tools, and spawn helper agents.
 
-Param is intended to run natively on Linux, macOS, and Windows. The first
-production target is still a Linux VPS, but local setup and host-install design
-should stay cross-platform from the start.
+## Stack
 
-Param should feel like a regular friend in a chat, not a command bot or a
-helpful-assistant helpdesk.
+- Eve
+- TypeScript
+- Bun for package management and scripts
+- Telegram webhooks
+- Vercel/Eve durable agent runtime
+- Sandboxes or runtime adapters for native work
 
-## Start Here
+## Setup
 
-For implementation agents:
+Eve requires Node.js 24.
 
-```text
-AGENTS.md
-docs/IMPLEMENTATION_GUIDE.md
-docs/DECISIONS.md
-docs/DEPENDENCIES.md
-docs/PROJECT_STRUCTURE.md
+```bash
+bun install
 ```
 
-For humans:
+Set env vars from `.env.example`.
 
-```text
-docs/README.md
-docs/IMPLEMENTATION_GUIDE.md
-docs/DECISIONS.md
+Run locally:
+
+```bash
+bun x eve dev
 ```
 
-Do not read every doc before implementing. The docs are reference material.
-Load only the subsystem docs needed for the current change.
-
-## Current State
-
-This repo currently contains architecture docs plus the first runnable Bun /
-TypeScript scaffold:
-
-```text
-bun run setup
-bun run doctor
-bun run check
-```
-
-`setup` creates missing local `.env` and `param.config.local.ts` files.
-`doctor` prints the effective config in redacted form.
-`check` runs typecheck and tests.
-
-The referenced systems live in:
-
-```text
-references/hermes-agent
-references/openclaw
-```
-
-Those directories are reference submodules. Treat them as read-only unless a
-task explicitly says otherwise.
-
-## Default Stack
-
-```text
-Bun
-TypeScript
-Hono
-Drizzle
-Bun SQL
-local Postgres + pgvector
-Vercel Chat SDK
-Codex CLI runtime adapter
-MCP TypeScript SDK
-Zod
-```
-
-Detailed package choices live in `docs/DEPENDENCIES.md`.
+Do not run `eve dev` from automation; it opens an interactive TUI.
