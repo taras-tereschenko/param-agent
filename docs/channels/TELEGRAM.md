@@ -19,7 +19,7 @@ The Telegram channel adapter is responsible for:
 - mapping them into Param events
 - preserving raw Telegram payloads
 - resolving platform routing facts
-- sending messages, reactions, files, buttons, and Mini App links
+- sending messages, rich messages, reactions, files, buttons, and Mini App links
 - validating Telegram-specific limits
 - retrying delivery safely
 - hiding Telegram-specific details from the actor and orchestrator
@@ -336,7 +336,7 @@ Actor outputs map to Telegram delivery:
 ```text
 message -> sendMessage or media send method
 react_to_message -> setMessageReaction
-render_ui -> inline keyboard, card-like message, or Mini App link
+render_ui -> sendRichMessage, inline keyboard, card-like message, or Mini App link
 approval_request -> reply/buttons in current approval target
 ```
 
@@ -347,6 +347,7 @@ Delivery should store:
 - target chat id
 - message thread id
 - reply parameters
+- rich message payload hash, when used
 - payload hash
 - platform message id on success
 - error code/message on failure
@@ -370,6 +371,70 @@ The adapter should:
 
 If a message is too long for normal chat style, the style guard should usually
 fix it before delivery.
+
+## Rich Messages
+
+Telegram Rich Messages are the preferred Telegram-native surface for structured
+text that is richer than a normal chat bubble but does not need a full Mini App.
+
+The adapter should support:
+
+- `sendRichMessage` for final rich messages
+- `editMessageText` with `rich_message` for supported rich-message edits
+- `sendRichMessageDraft` for private-chat ephemeral previews while an actor is
+  still generating output
+
+Rich Messages should be produced only by the UI Renderer from validated Param UI
+schemas. The actor can request a rich surface through `render_ui`, but it must
+not provide raw Telegram HTML or Markdown.
+
+Recommended mappings:
+
+```text
+param.rich_text
+  -> sendRichMessage
+
+param.card
+  -> sendRichMessage when it is mostly text
+  -> Mini App link when it needs complex layout/state
+
+param.status
+  -> sendRichMessage for compact progress/status
+  -> Mini App for live dashboards
+
+param.table
+  -> sendRichMessage for small tables
+  -> Mini App or artifact for large tables
+```
+
+Fallback order:
+
+```text
+sendRichMessage
+  -> normal text/card-like message
+  -> Mini App link
+  -> artifact summary
+```
+
+Rich message safety rules:
+
+- validate generated rich message input before delivery
+- sanitize/escape all text inserted into rendered HTML or Markdown
+- enforce Telegram block/media limits once known by implementation
+- do not include unapproved remote media URLs
+- do not use paid broadcast options without Action Review
+- keep ordinary friend-chat replies as plain `message` outputs
+- store the rendered rich message hash and source UI surface id
+
+Draft streaming rules:
+
+- use only when the target chat supports it; Telegram currently documents
+  `sendRichMessageDraft` for private chats
+- use a stable non-zero draft id per actor run/output preview
+- rate-limit draft updates
+- treat drafts as ephemeral, not persisted delivery
+- send the final durable message with `sendRichMessage`
+- never include draft-only thinking blocks in final output
 
 ## Reactions
 

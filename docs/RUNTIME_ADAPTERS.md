@@ -18,6 +18,7 @@ Target runtimes:
 - Codex
 - OpenCode
 - Antigravity
+- Pi as a future harness-backed runtime
 - image generation runtimes
 - browser automation runtimes
 - custom CLI runtimes
@@ -36,23 +37,28 @@ still owns:
 - output validation
 - delivery to chat
 
-## AI SDK Is Optional And Not The Runtime Adapter Layer
+## AI SDK Harnesses Inside Runtime Adapters
 
 Param starts with Codex CLI through the Codex runtime adapter.
 
-AI SDK is optional. It can be useful later for structured output helpers, tool
-schemas, generated UI data, testing, telemetry, an API-backed runtime, or a
-community-provider experiment.
+Local direct Codex CLI execution is the default implementation path for the
+Codex adapter on the VPS/native host.
+
+AI SDK beta harnesses are an accepted optional implementation path for sandboxed
+Codex sessions.
 
 Direct paid API model calls are not part of the default runtime.
 
-It does not replace runtime adapters.
+AI SDK still does not replace Param runtime adapters.
 
-Even when an AI SDK community provider exists for a CLI, the CLI is still a
-runtime from Param's point of view. Param needs a runtime adapter because code
-agent CLIs have their own process lifecycle, auth, workspaces, sandboxing,
-approval modes, internal tools, artifacts, logs, cancellation behavior, and
-steering behavior.
+`HarnessAgent` gives Param an official AI SDK surface for agent harnesses such
+as Codex, Pi, and Claude Code. It can manage harness sessions, sandboxed
+workspaces, skills, runtime configuration, compaction, and AI SDK-compatible
+streams.
+
+Param still needs runtime adapters because coding agents have their own process
+lifecycle, auth, workspaces, sandboxing, approval modes, internal tools,
+artifacts, logs, cancellation behavior, and steering behavior.
 
 Rule:
 
@@ -61,16 +67,65 @@ AI SDK may be an implementation detail inside a runtime adapter.
 It is not the boundary between Param core and a runtime.
 ```
 
-Current provider posture:
+Current harness posture:
 
-- Codex CLI has an AI SDK community provider, but Param still needs a Codex
-  runtime adapter.
-- OpenCode has an AI SDK community provider, but Param still needs an OpenCode
-  runtime adapter.
-- Antigravity has no default AI SDK provider dependency in Param.
+- Codex should use the local installed `codex` CLI by default.
+- Codex can use `HarnessAgent` with `@ai-sdk/harness-codex` when the runtime
+  config explicitly selects `adapter: "ai-sdk-harness"`.
+- `@ai-sdk/sandbox-vercel` is the supported sandbox provider for that harness
+  path today; it is not Param's default local execution path.
+- Pi can use the same harness pattern later if enabled.
+- OpenCode has a harness package listed as work in progress, so Param keeps a
+  direct OpenCode adapter for now.
+- Antigravity has no default AI SDK harness dependency in Param.
 - Direct provider packages such as `@ai-sdk/openai`, `@ai-sdk/anthropic`, and
   `@ai-sdk/google` are optional future API-runtime dependencies, not bootstrap
   dependencies and not a way to control coding CLIs.
+
+Community AI SDK providers for Codex CLI or OpenCode are no longer the preferred
+path for Param's CLI runtimes.
+
+## Optional Codex Harness Path
+
+Target optional Codex harness implementation:
+
+```text
+Param Runtime Adapter
+  -> HarnessAgent
+  -> @ai-sdk/harness-codex
+  -> @ai-sdk/sandbox-vercel
+  -> Codex bridge / Codex CLI inside sandbox
+```
+
+Vercel sandbox settings when harness mode uses `@ai-sdk/sandbox-vercel`:
+
+```text
+provider: vercel
+runtime: node24
+ports: [4000]
+```
+
+Important rules:
+
+- Param persists the harness session/resume state by session or actor run.
+- The adapter resumes harness sessions instead of replaying full chat history
+  like a plain model call.
+- `stream()` output is normalized into Param runtime events before any delivery.
+- Text deltas are buffered or checkpointed according to Param output policy.
+- Harness events such as file changes, compaction, tool calls, usage, and
+  finish reasons become Param runtime events, artifacts, audit records, or
+  actor outputs.
+- Codex harness built-in tool approvals are not assumed to be enough. Param
+  still wraps every consequential action with Action Review.
+- AI SDK host-executed tools can use AI SDK tool approval, but Param Action
+  Review is still the policy source.
+- If Codex requires permissive built-in permission mode inside the sandbox,
+  that permission applies only inside the sandbox boundary and does not grant
+  Param-level approval.
+- The Vercel sandbox bridge needs exposed ports; the Codex package README uses
+  port `4000`.
+- Skills can be passed through the harness, but Codex injects supplied skills
+  inline each turn, so prefer a few focused larger skills over many tiny ones.
 
 ## Adapter Implementation Posture
 
@@ -78,12 +133,12 @@ Param should build real adapters for the first coding CLIs.
 
 Default posture:
 
-- Codex adapter: runtime boundary is `src/runtimes/codex/`; it can test the
-  Codex CLI community provider, but must also understand Codex process/config
-  behavior directly.
-- OpenCode adapter: runtime boundary is `src/runtimes/opencode/`; it can test
-  the OpenCode community provider, but must preserve Param output buffering,
-  Action Review, artifacts, and logs.
+- Codex adapter: runtime boundary is `src/runtimes/codex/`; implement direct
+  local CLI execution first, then support the official AI SDK beta harness path
+  as an explicit sandboxed mode.
+- OpenCode adapter: runtime boundary is `src/runtimes/opencode/`; start as a
+  direct CLI/SDK adapter until the official harness is usable, while preserving
+  Param output buffering, Action Review, artifacts, and logs.
 - Antigravity adapter: runtime boundary is `src/runtimes/antigravity/`; start
   as a direct CLI/SDK adapter unless an official or trusted provider exists and
   passes adapter tests.
@@ -431,8 +486,23 @@ Codex can be used for:
 - patch generation
 - server-management planning
 
+Preferred implementation:
+
+- run the installed local `codex` CLI by default
+- use `HarnessAgent` only when config selects `adapter: "ai-sdk-harness"`
+- for harness mode, create a `HarnessAgent` from `@ai-sdk/harness/agent`
+- for harness mode, use `createCodex()` from `@ai-sdk/harness-codex`
+- for harness mode, use `createVercelSandbox()` from `@ai-sdk/sandbox-vercel`
+  until another compatible sandbox provider is available
+
 Adapter behavior:
 
+- create, monitor, cancel, and clean up local Codex CLI runs
+- in harness mode, create, detach, resume, stop, or destroy harness sessions
+  according to Param session and actor-run lifecycle
+- in harness mode, store opaque harness resume state instead of trying to
+  reconstruct runtime state from chat messages
+- prepare runtime workspaces through the adapter, not the orchestrator
 - use Codex personalization or custom instructions when available
 - use project instructions such as `AGENTS.md` where appropriate
 - keep Param prompt contracts outside ad hoc chat text when possible
@@ -440,6 +510,9 @@ Adapter behavior:
 - buffer visible chat output unless safe checkpoint streaming is confirmed
 - intercept proposed file edits, shell commands, and external actions through
   Param Action Review
+- treat harness built-in approvals as runtime hints, not final Param approval
+- normalize AI SDK stream parts into Param runtime events before actor output
+  validation
 - store Codex logs and artifacts as runtime events/artifacts
 
 Codex-specific configuration should stay inside the Codex adapter.

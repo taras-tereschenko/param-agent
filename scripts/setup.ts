@@ -164,6 +164,7 @@ async function collectAnswers(): Promise<SetupAnswers> {
 
 async function main() {
   const hostPlatform = getSupportedHostPlatform();
+  ensureInteractiveTerminal();
 
   intro("Param setup");
 
@@ -214,6 +215,21 @@ function getSupportedHostPlatform() {
     cancel(message);
     process.exit(1);
   }
+}
+
+function ensureInteractiveTerminal() {
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    return;
+  }
+
+  console.error(
+    [
+      "Param setup is interactive in this implementation.",
+      "Run it from an interactive terminal, or create .env and param.config.local.ts manually.",
+      "Non-interactive installer flags belong to the future full installer slice.",
+    ].join("\n"),
+  );
+  process.exit(1);
 }
 
 await main();

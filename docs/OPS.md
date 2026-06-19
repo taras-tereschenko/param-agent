@@ -352,6 +352,10 @@ If a change is risky, installer should ask for explicit confirmation.
 
 ## Installer Modes
 
+These modes describe the future full installer (`scripts/install.ts`). The
+current `scripts/setup.ts` bootstrap is intentionally interactive-only and
+fails clearly when run without a TTY.
+
 Database install flags:
 
 ```text
@@ -518,7 +522,7 @@ That id is used for two different things:
 Allowed groups are separate. The installer must not treat the owner's id as an
 allowed group, and it must not treat allowed groups as trusted users.
 
-In non-interactive mode, setup must receive the owner id through
+In non-interactive full-installer mode, setup must receive the owner id through
 `--owner-telegram-user-id` or an existing `PARAM_OWNER_TELEGRAM_USER_ID`.
 
 ## Telegram Id Discovery

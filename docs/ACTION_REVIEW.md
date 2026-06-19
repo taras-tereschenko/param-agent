@@ -488,7 +488,7 @@ Tool calls that need approval should not execute until approval is valid.
 Relevant config sections:
 
 - `trustedUsers`
-- `tools.safeAutoRun`
+- `actionReview.safeAutoRunTools`
 - `tools.policies`
 - `actionReview`
 - `scheduler.ambientTurns`

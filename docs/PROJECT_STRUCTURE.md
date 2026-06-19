@@ -40,7 +40,8 @@ Examples:
 
 - Chat SDK packages belong to `src/channels/`.
 - Drizzle and Bun SQL belong to `src/db/`.
-- AI SDK belongs to `src/actor/`, `src/prompts/`, task agents, and generated UI.
+- AI SDK belongs to `src/runtimes/` for harness adapters, plus `src/actor/`,
+  `src/prompts/`, task agents, and generated UI where those surfaces need it.
 - MCP SDK belongs to `src/tools/mcp/`.
 - shadcn-generated components belong to `src/ui/`.
 
@@ -175,7 +176,6 @@ Responsibilities:
 src/db/
   client.ts
   schema/
-  migrations/
   repositories/
   transactions.ts
 ```
@@ -183,12 +183,13 @@ src/db/
 Responsibilities:
 
 - Drizzle schema
-- migrations
+- migration helpers
 - query helpers
 - transaction boundaries
 - advisory locks
 - typed repositories
 
+Generated Drizzle migrations live in top-level `drizzle/migrations`.
 Database structure is documented in `docs/DATABASE.md`.
 
 ## Contracts Module
@@ -628,7 +629,8 @@ service files, or local config.
 `scripts/setup.ts` is the early interactive local setup entrypoint. It creates
 missing `.env` and `param.config.local.ts` files and checks selected runtimes.
 It does not install Linux packages, create service users, configure Postgres, or
-write native service files.
+write native service files. It requires an interactive TTY; non-interactive
+flags belong to the later full installer.
 
 ## Install Script Contract
 

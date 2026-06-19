@@ -4,9 +4,21 @@ import { pathToFileURL } from "node:url";
 import baseConfig from "../../param.config";
 import { paramConfigSchema, type ParamConfig, type ParamConfigOverride } from "./schema";
 
-export async function loadConfig(): Promise<ParamConfig> {
+export type ConfigEnv = Record<string, string | undefined>;
+
+export type LoadConfigOptions = {
+  env?: ConfigEnv;
+};
+
+export async function loadConfig(
+  options: LoadConfigOptions = {},
+): Promise<ParamConfig> {
   const localConfig = await loadLocalConfig();
-  const merged = mergeConfig(baseConfig, localConfig ?? {});
+  const envConfig = configOverrideFromEnv(options.env ?? Bun.env);
+  const merged = mergeConfig(
+    mergeConfig(baseConfig, localConfig ?? {}),
+    envConfig,
+  );
 
   return paramConfigSchema.parse(merged);
 }
@@ -30,6 +42,31 @@ export function mergeConfig(
   override: ParamConfigOverride,
 ): ParamConfig {
   return deepMerge(base, override) as ParamConfig;
+}
+
+export function configOverrideFromEnv(env: ConfigEnv): ParamConfigOverride {
+  const override: ParamConfigOverride = {};
+
+  assignIfPresent(override, ["app", "environment"], env.PARAM_ENV);
+  assignIfPresent(override, ["app", "publicBaseUrl"], env.PARAM_PUBLIC_BASE_URL);
+  assignIfPresent(override, ["database", "provider"], env.DATABASE_PROVIDER);
+  assignIfPresent(
+    override,
+    ["database", "provisioningMode"],
+    env.DATABASE_PROVISIONING_MODE,
+  );
+  assignIfPresent(
+    override,
+    ["database", "ssl"],
+    parseDatabaseSslEnv(env.DATABASE_SSL),
+  );
+  assignIfPresent(
+    override,
+    ["observability", "logs", "level"],
+    env.PARAM_LOG_LEVEL,
+  );
+
+  return override;
 }
 
 function deepMerge(base: unknown, override: unknown): unknown {
@@ -56,6 +93,46 @@ function deepMerge(base: unknown, override: unknown): unknown {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assignIfPresent(
+  target: Record<string, unknown>,
+  path: string[],
+  value: unknown,
+) {
+  if (value === undefined || value === "") {
+    return;
+  }
+
+  const [head, ...tail] = path;
+  if (!head) {
+    return;
+  }
+
+  if (tail.length === 0) {
+    target[head] = value;
+    return;
+  }
+
+  const next = isRecord(target[head]) ? target[head] : {};
+  target[head] = next;
+  assignIfPresent(next, tail, value);
+}
+
+function parseDatabaseSslEnv(value: string | undefined) {
+  if (!value) {
+    return undefined;
+  }
+
+  if (value === "true") {
+    return true;
+  }
+
+  if (value === "false") {
+    return false;
+  }
+
+  return value;
 }
 
 function isSecretRefRecord(value: unknown) {

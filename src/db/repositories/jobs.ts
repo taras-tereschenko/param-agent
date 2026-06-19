@@ -1,4 +1,16 @@
-import { and, asc, desc, eq, gt, gte, lt, lte, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 import { z } from "zod";
 
 import type { ParamDb } from "../client";
@@ -10,6 +22,11 @@ export type ClaimJobOptions = {
   workerId: string;
   leaseSeconds: number;
   now?: Date;
+};
+
+export type ClaimNextJobResult = {
+  job: Job | undefined;
+  recoveredExpiredJobs: Job[];
 };
 
 export async function enqueueJob(db: ParamDb, job: NewJob): Promise<Job> {
@@ -36,30 +53,55 @@ export async function claimNextJob(
   db: ParamDb,
   options: ClaimJobOptions,
 ): Promise<Job | undefined> {
+  const result = await claimNextJobWithRecovery(db, options);
+  return result.job;
+}
+
+export async function claimNextJobWithRecovery(
+  db: ParamDb,
+  options: ClaimJobOptions,
+): Promise<ClaimNextJobResult> {
   const now = options.now ?? new Date();
   const leaseExpiresAt = new Date(now.getTime() + options.leaseSeconds * 1000);
 
   return db.transaction(async (tx) => {
-    await tx
-      .update(jobs)
-      .set({
-        status: "failed",
-        lockOwner: null,
-        lockExpiresAt: null,
-        completedAt: now,
-        lastError: {
-          kind: "max_attempts_exhausted",
-          message: "job lock expired after max attempts",
-        },
-        updatedAt: now,
-      })
+    const expiredFinalAttemptJobs = await tx
+      .select({ id: jobs.id })
+      .from(jobs)
       .where(
         and(
           eq(jobs.status, "running"),
           lte(jobs.lockExpiresAt, now),
           gte(jobs.attemptCount, jobs.maxAttempts),
         ),
-      );
+      )
+      .orderBy(asc(jobs.lockExpiresAt), asc(jobs.createdAt))
+      .limit(100)
+      .for("update", { skipLocked: true });
+
+    const recoveredExpiredJobs =
+      expiredFinalAttemptJobs.length === 0
+        ? []
+        : await tx
+            .update(jobs)
+            .set({
+              status: "failed",
+              lockOwner: null,
+              lockExpiresAt: null,
+              completedAt: now,
+              lastError: {
+                kind: "max_attempts_exhausted",
+                message: "job lock expired after max attempts",
+              },
+              updatedAt: now,
+            })
+            .where(
+              inArray(
+                jobs.id,
+                expiredFinalAttemptJobs.map((job) => job.id),
+              ),
+            )
+            .returning();
 
     const [claimable] = await tx
       .select()
@@ -83,7 +125,10 @@ export async function claimNextJob(
       .for("update", { skipLocked: true });
 
     if (!claimable) {
-      return undefined;
+      return {
+        job: undefined,
+        recoveredExpiredJobs,
+      };
     }
 
     const [claimed] = await tx
@@ -98,7 +143,64 @@ export async function claimNextJob(
       .where(eq(jobs.id, claimable.id))
       .returning();
 
-    return claimed;
+    return {
+      job: claimed,
+      recoveredExpiredJobs,
+    };
+  });
+}
+
+export type FailExpiredRunningJobsOptions = {
+  now?: Date;
+  limit?: number;
+};
+
+export async function failExpiredRunningJobs(
+  db: ParamDb,
+  options: FailExpiredRunningJobsOptions = {},
+): Promise<Job[]> {
+  const now = options.now ?? new Date();
+  const limit = options.limit ?? 100;
+
+  return db.transaction(async (tx) => {
+    const expiredJobs = await tx
+      .select({ id: jobs.id })
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.status, "running"),
+          lte(jobs.lockExpiresAt, now),
+          gte(jobs.attemptCount, jobs.maxAttempts),
+        ),
+      )
+      .orderBy(asc(jobs.lockExpiresAt), asc(jobs.createdAt))
+      .limit(limit)
+      .for("update", { skipLocked: true });
+
+    if (expiredJobs.length === 0) {
+      return [];
+    }
+
+    return tx
+      .update(jobs)
+      .set({
+        status: "failed",
+        lockOwner: null,
+        lockExpiresAt: null,
+        completedAt: now,
+        lastError: {
+          kind: "max_attempts_exhausted",
+          message: "job lock expired after max attempts",
+        },
+        updatedAt: now,
+      })
+      .where(
+        inArray(
+          jobs.id,
+          expiredJobs.map((job) => job.id),
+        ),
+      )
+      .returning();
   });
 }
 
@@ -205,8 +307,10 @@ export async function findExpiredRunningJobs(
 
 export const jobsRepository = {
   claimNextJob,
+  claimNextJobWithRecovery,
   completeJob,
   enqueueJob,
   failJob,
+  failExpiredRunningJobs,
   findExpiredRunningJobs,
 };

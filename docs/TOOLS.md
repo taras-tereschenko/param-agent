@@ -353,7 +353,6 @@ Large outputs become artifacts with summaries.
 
 ```ts
 type ToolsConfig = {
-  safeAutoRun: string[];
   disabled?: string[];
   policies?: Record<string, ToolPolicyConfig>;
   mcp?: McpToolsConfig;
@@ -387,6 +386,10 @@ type ToolExecutionConfig = {
   maxConcurrentToolCalls: number;
 };
 ```
+
+The current implementation stores the small safe auto-run list at
+`actionReview.safeAutoRunTools`. Tool-specific policy can still expand under
+`tools.policies` as the registry is implemented.
 
 ## Tests
 

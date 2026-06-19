@@ -79,18 +79,21 @@ export default defineParamConfig({
   runtimes: {
     codex: {
       enabled: true,
+      adapter: "direct-cli",
       command: "codex",
       workspacesDir: "/var/lib/param-agent/runtime-workspaces/codex",
       startupCheck: "require",
     },
     opencode: {
       enabled: true,
+      adapter: "direct-cli",
       command: "opencode",
       workspacesDir: "/var/lib/param-agent/runtime-workspaces/opencode",
       startupCheck: "warn",
     },
     antigravity: {
       enabled: true,
+      adapter: "direct-cli",
       command: "antigravity",
       workspacesDir: "/var/lib/param-agent/runtime-workspaces/antigravity",
       startupCheck: "warn",
@@ -103,6 +106,7 @@ export default defineParamConfig({
   },
   observability: {
     logs: {
+      level: "info",
       format: "json",
       artifactLargeLogs: true,
     },

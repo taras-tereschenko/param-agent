@@ -140,10 +140,17 @@ Relevant lessons:
 - Mini Apps can be launched from Telegram surfaces and need a public web
   surface for the UI.
 
-### AI SDK UI, Testing, And Telemetry
+### AI SDK Harnesses, UI, Testing, And Telemetry
 
 Sources:
 
+- [Vercel changelog: Program Claude Code, Codex, Pi and other agent harnesses with AI SDK](https://vercel.com/changelog/program-agent-harnesses-with-ai-sdk)
+- [AI SDK harness overview](https://ai-sdk.dev/v7/docs/ai-sdk-harnesses/overview)
+- [AI SDK HarnessAgent](https://ai-sdk.dev/v7/docs/ai-sdk-harnesses/harness-agent)
+- [AI SDK harness adapters](https://ai-sdk.dev/v7/docs/ai-sdk-harnesses/harness-adapters)
+- [AI SDK harness tools](https://ai-sdk.dev/v7/docs/ai-sdk-harnesses/tools)
+- [AI SDK harness skills](https://ai-sdk.dev/v7/docs/ai-sdk-harnesses/skills)
+- [AI SDK harness UI integration](https://ai-sdk.dev/v7/docs/ai-sdk-harnesses/ui)
 - [AI SDK providers and models](https://ai-sdk.dev/docs/foundations/providers-and-models)
 - [AI SDK OpenAI provider](https://ai-sdk.dev/providers/ai-sdk-providers/openai)
 - [AI SDK Codex CLI community provider](https://ai-sdk.dev/providers/community-providers/codex-cli)
@@ -158,6 +165,32 @@ Sources:
 
 Relevant lessons:
 
+- AI SDK 7 introduces `HarnessAgent` as a single API for established
+  agent harnesses such as Claude Code, Codex, and Pi.
+- Harnesses manage the layer above a model call: sessions, sandboxed
+  workspaces, skills, permissions, compaction, runtime configuration, and
+  sub-agents.
+- `HarnessAgent.generate()` and `HarnessAgent.stream()` return AI SDK-compatible
+  results.
+- AI SDK harness packages remain experimental. Prefer beta dist-tags when
+  available, use canary only as a temporary fallback, and let Bun plus
+  `bun.lock` record exact resolved versions.
+- The Codex harness package is `@ai-sdk/harness-codex`.
+- The Codex harness uses a bridge in a sandbox and needs a sandbox provider with
+  exposed ports.
+- `@ai-sdk/sandbox-vercel` is the supported sandbox provider for the Codex
+  harness today; examples use `runtime: "node24"` and port `4000`.
+- Param does not need Vercel Sandbox to run Codex locally. Local direct Codex
+  CLI execution is the default VPS/native runtime path; harness mode is an
+  explicit sandboxed adapter option.
+- Codex harness sessions should be resumed or stopped through harness session
+  lifecycle APIs instead of replaying a full chat transcript.
+- Codex does not auto-discover a skills directory in the same way some other
+  CLIs do; supplied skills are injected inline, so fewer larger skills are
+  better than many tiny ones.
+- Codex built-in tool approval support is not assumed. Param still wraps
+  host-executed tools, built-in runtime activity, and final side effects with
+  Param Action Review.
 - Generative UI should be tied to tools and structured results, not freeform
   model-written frontend code.
 - `useObject` can stream structured JSON objects into UI, which matches Param's
@@ -173,14 +206,55 @@ Relevant lessons:
   `@ai-sdk/google` are optional future API-runtime dependencies, not default
   bootstrap packages.
 - AI SDK UI's React hooks live in `@ai-sdk/react`.
-- AI SDK lists community providers for Codex CLI and OpenCode.
-- The Codex CLI community provider does not support AI SDK custom tools;
-  Codex executes its own tools, and Param must observe/wrap that behavior.
-- The OpenCode community provider also does not support AI SDK custom tools;
-  OpenCode executes tools server-side.
-- No Antigravity CLI provider is part of Param's default AI SDK dependency set.
-- AI SDK can be useful for generated structured data, tests, telemetry, and
-  future API-backed runtimes, but it is not Param's runtime adapter boundary.
+- AI SDK community providers for Codex CLI and OpenCode are no longer the
+  preferred Param path now that official harness packages exist.
+
+### Eve
+
+Sources:
+
+- [Introducing eve](https://vercel.com/blog/introducing-eve)
+- [vercel/eve](https://github.com/vercel/eve)
+- Eve bundled docs in `node_modules/eve/docs` after installing `eve`
+
+Relevant lessons:
+
+- Eve is a filesystem-first framework for durable agents with built-in
+  sessions, channels, tools, skills, subagents, schedules, evals, sandboxing,
+  and human-in-the-loop pauses.
+- Eve's Telegram channel supports webhooks, message filtering, HITL rendering,
+  attachments, and proactive sessions, but Eve owns its own channel/runtime
+  layer and does not use the Chat SDK runtime.
+- Eve's agent config accepts AI Gateway model ids or provider `LanguageModel`
+  instances. It does not directly treat AI SDK `HarnessAgent` or the Codex CLI
+  harness as its core model.
+- Param should not adopt Eve by default yet because Param's Telegram-first
+  channel rules, deterministic orchestrator, live steering, stale-output
+  prevention, Action Review, memory scoping, and runtime adapters are core
+  boundaries.
+- If revisited, Eve should first be explored as a reference pattern or as an
+  optional runtime adapter/task-agent surface behind Param contracts, not as a
+  replacement for Param's main control plane.
+
+## Telegram Rich Messages
+
+Official references:
+
+- [Telegram Bot API 10.1 Rich Messages](https://core.telegram.org/bots/api#recent-changes)
+- [Telegram Bot API RichMessage](https://core.telegram.org/bots/api#richmessage)
+- [Telegram Bot API InputRichMessage](https://core.telegram.org/bots/api#inputrichmessage)
+- [Telegram Bot API sendRichMessage](https://core.telegram.org/bots/api#sendrichmessage)
+- [Telegram Bot API sendRichMessageDraft](https://core.telegram.org/bots/api#sendrichmessagedraft)
+
+Relevant lessons:
+
+- Telegram Rich Messages let bots send highly structured text.
+- `sendRichMessage` persists the final rich message.
+- `sendRichMessageDraft` streams temporary partial rich messages and must be
+  followed by a final persistent message.
+- Rich Messages can use HTML or Markdown input, but Param should generate those
+  from validated UI specs rather than letting the actor emit raw markup.
+- Draft-only thinking blocks are not final message content.
 
 ### MCP And Tool Calling
 

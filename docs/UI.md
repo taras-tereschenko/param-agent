@@ -33,10 +33,70 @@ actor intent
   -> schema validation
   -> UI Renderer
   -> Channel Adapter
-  -> Telegram message, buttons, Mini App, or artifact
+  -> Telegram message, rich message, buttons, Mini App, or artifact
 ```
 
 This keeps generated UI useful without letting a model invent unsafe code paths.
+
+## Telegram Rich Messages
+
+Telegram Bot API 10.1 added Rich Messages for highly structured text and
+streamed AI-generated replies.
+
+Param should support Telegram Rich Messages as a first-class renderer target.
+
+Use them for:
+
+- compact structured answers
+- headings and sections
+- lists
+- tables
+- code/preformatted blocks
+- collapsible details
+- quotes and pull quotes
+- mathematical expressions
+- rich media captions
+- lightweight progress/status surfaces
+
+Do not use them for:
+
+- ordinary friend-chat messages
+- arbitrary model-written HTML
+- arbitrary model-written Markdown
+- complex app-like workflows that need persistent interaction state
+- forms that need validation, state, auth, or multi-step callbacks
+
+Important boundary:
+
+```text
+actor asks for a rich surface
+  -> Param UI schema
+  -> Zod validation
+  -> Telegram Rich Message renderer
+  -> sendRichMessage
+```
+
+The actor should not emit raw Telegram Rich Message HTML or Markdown directly.
+The renderer owns HTML/Markdown generation from a validated Param schema.
+
+### Draft Streaming
+
+Telegram also supports `sendRichMessageDraft` for ephemeral partial rich
+messages while content is being generated.
+
+Param can use drafts for private-chat progress previews when useful, but drafts
+are not durable chat history:
+
+- draft output is temporary
+- draft updates must be rate-limited
+- final output must still be sent with `sendRichMessage`
+- draft-only blocks such as Telegram's thinking block must never appear in the
+  final persisted message
+- groups should not rely on rich message drafts unless Telegram expands support
+  beyond private chats
+
+If draft streaming fails, Param should continue the actor run and send the final
+message normally.
 
 ## Preferred Web Renderer
 
@@ -62,7 +122,7 @@ validated Param UI JSON
 
 The Vercel layer is an implementation choice for Telegram Mini App pages. The
 Param contract stays channel-neutral so Telegram buttons, plain text fallback,
-and future chat channels still work.
+Telegram Rich Messages, and future chat channels still work.
 
 ## shadcn/ui Component Layer
 

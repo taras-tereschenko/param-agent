@@ -18,10 +18,16 @@ export function createDbClient(config: ParamConfig) {
     url: resolveDatabaseUrl(config),
     max: config.database.pool.max,
     idleTimeout: config.database.pool.idleTimeoutSeconds,
-    tls: config.database.ssl,
+    tls: databaseTlsEnabled(config.database.ssl),
   });
 
   return drizzle(client, { schema });
+}
+
+export function databaseTlsEnabled(
+  ssl: ParamConfig["database"]["ssl"],
+): boolean {
+  return ssl === true || ssl === "require";
 }
 
 export type ParamDb = ReturnType<typeof createDbClient>;

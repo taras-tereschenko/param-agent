@@ -79,6 +79,9 @@ in `BUILD_SPEC.md`.
 - Telegram reaction choices come from the chat's available reactions when
   present.
 - Reaction emoji limits apply only to `react_to_message`, not normal text.
+- Telegram Rich Messages are a first-class rendering target for structured
+  text, but the actor emits validated `render_ui` specs rather than raw
+  Telegram HTML or Markdown.
 - Telegram access is restricted by config to allowed DM users, groups, and
   topics.
 - Allowed DM users control private chats.
@@ -114,7 +117,7 @@ in `BUILD_SPEC.md`.
 - Detailed task-agent behavior lives in `docs/TASK_AGENTS.md`.
 - Task agents usually report to the Session Actor, not directly to chat.
 - Runtime adapters target Codex, Antigravity, OpenCode, image generation,
-  browser automation, and custom CLIs.
+  browser automation, custom CLIs, and future harness runtimes such as Pi.
 - Detailed runtime-adapter behavior lives in `docs/RUNTIME_ADAPTERS.md`.
 - Codex CLI is the first/default main actor runtime because it can use the
   existing Codex subscription path.
@@ -122,8 +125,26 @@ in `BUILD_SPEC.md`.
 - External agent CLIs always sit behind Param runtime adapters.
 - OpenCode and Antigravity are enabled target runtimes, but they can be
   warning-only at startup while Codex is the first required actor runtime.
-- AI SDK community providers for Codex CLI or OpenCode are optional adapter
-  implementation details, not Param's runtime boundary.
+- Local direct Codex CLI execution is the default Codex adapter mode on the
+  VPS/native host.
+- AI SDK `HarnessAgent` is an accepted Codex adapter mode for sandboxed harness
+  sessions, but it does not force Vercel Sandbox as the default runtime path.
+- AI SDK beta harness packages are preferred when available. Canary harness
+  packages are allowed only as a temporary fallback when a needed harness
+  package has no beta release.
+- `@ai-sdk/harness-codex` and `@ai-sdk/sandbox-vercel` are accepted
+  dependencies because they give Param an official Codex harness surface.
+- AI SDK harnesses are still adapter internals, not Param's runtime boundary.
+- Eve is not part of Param's default architecture for now.
+- Eve can be revisited later as a reference for file-first tools, skills,
+  subagents, schedules, evals, and durable sessions, or as a runtime adapter,
+  but it should not replace Param's Telegram channel, deterministic
+  orchestrator, Action Review, memory scoping, or runtime-adapter boundary
+  without a new decision.
+- OpenCode's AI SDK harness is treated as future/WIP; Param keeps a direct
+  OpenCode adapter target for now.
+- Antigravity stays a direct adapter target unless an official harness appears
+  and passes Param adapter tests.
 - Runtime adapters stream structured events back to Param.
 - Runtime adapters inject Param's personality through each runtime's supported
   configuration surfaces.

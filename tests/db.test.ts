@@ -7,8 +7,17 @@ import { describe, expect, test } from "bun:test";
 
 import baseConfig from "../param.config";
 import { resolveSecretRef } from "../src/config/secrets";
-import { resolveDatabaseUrl } from "../src/db/client";
-import { jobStatusSchema } from "../src/db/repositories";
+import { databaseTlsEnabled, resolveDatabaseUrl } from "../src/db/client";
+import {
+  jobStatusSchema,
+  validateEventJsonColumns,
+  validateRawPayloadJsonColumns,
+} from "../src/db/repositories";
+import {
+  coreDatabaseConstraints,
+  coreDatabaseIndexes,
+  coreDatabaseTables,
+} from "../src/db/extensions";
 import { schema } from "../src/db/schema";
 
 describe("database config", () => {
@@ -34,6 +43,12 @@ describe("database config", () => {
       await rm(dir, { force: true, recursive: true });
     }
   });
+
+  test("maps database ssl modes to Bun SQL tls settings", () => {
+    expect(databaseTlsEnabled(false)).toBe(false);
+    expect(databaseTlsEnabled(true)).toBe(true);
+    expect(databaseTlsEnabled("require")).toBe(true);
+  });
 });
 
 describe("database schema", () => {
@@ -56,8 +71,53 @@ describe("database schema", () => {
     expect(getTableName(schema.auditLog)).toBe("audit_log");
   });
 
+  test("tracks core tables required by db:check", () => {
+    expect(coreDatabaseTables).toContain("sessions");
+    expect(coreDatabaseTables).toContain("events");
+    expect(coreDatabaseTables).toContain("jobs");
+    expect(coreDatabaseTables).toContain("audit_log");
+  });
+
+  test("tracks core indexes and constraints required by db:check", () => {
+    expect(coreDatabaseIndexes).toContain("events_dedupe_key_unique");
+    expect(coreDatabaseIndexes).toContain("jobs_idempotency_key_unique");
+    expect(coreDatabaseConstraints).toContain("jobs_status_check");
+    expect(coreDatabaseConstraints).toContain("events_direction_check");
+  });
+
   test("validates stable job statuses", () => {
     expect(jobStatusSchema.parse("queued")).toBe("queued");
     expect(jobStatusSchema.safeParse("thinking").success).toBe(false);
+  });
+
+  test("validates event repository JSONB contracts", () => {
+    expect(() =>
+      validateEventJsonColumns({
+        source: { kind: "user" },
+        platform: { platform: "telegram" },
+        payload: { text: "yo" },
+        raw: { provider: "telegram" },
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      validateEventJsonColumns({
+        source: ["not", "an", "object"] as unknown as Record<string, unknown>,
+        platform: null,
+        payload: {},
+        raw: null,
+      }),
+    ).toThrow();
+  });
+
+  test("validates raw payload JSONB contracts", () => {
+    expect(() =>
+      validateRawPayloadJsonColumns({ json: { updateId: "123" } }),
+    ).not.toThrow();
+    expect(() =>
+      validateRawPayloadJsonColumns({
+        json: [] as unknown as Record<string, unknown>,
+      }),
+    ).toThrow();
   });
 });

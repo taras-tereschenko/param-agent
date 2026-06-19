@@ -111,6 +111,7 @@ export function buildEnvFile(answers: SetupAnswers) {
 # Database
 DATABASE_PROVIDER=local
 DATABASE_PROVISIONING_MODE=local-postgres
+DATABASE_SSL=false
 DATABASE_URL=${serializeEnvValue(answers.databaseUrl)}
 
 # Telegram

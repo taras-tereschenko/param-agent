@@ -253,18 +253,21 @@ export default defineParamConfig({
   runtimes: {
     codex: {
       enabled: true,
+      adapter: "direct-cli",
       command: "codex",
       workspacesDir: "/var/lib/param-agent/runtime-workspaces/codex",
       startupCheck: "require",
     },
     opencode: {
       enabled: true,
+      adapter: "direct-cli",
       command: "opencode",
       workspacesDir: "/var/lib/param-agent/runtime-workspaces/opencode",
       startupCheck: "warn",
     },
     antigravity: {
       enabled: true,
+      adapter: "direct-cli",
       command: "antigravity",
       workspacesDir: "/var/lib/param-agent/runtime-workspaces/antigravity",
       startupCheck: "warn",
@@ -328,13 +331,16 @@ export default defineParamConfig({
     },
   },
 
-  tools: {
-    safeAutoRun: [
+  actionReview: {
+    safeAutoRunTools: [
       "system.health.read",
       "logs.tail",
       "fs.read_scoped",
       "git.status",
     ],
+  },
+
+  tools: {
     mcp: {
       enabled: true,
       servers: {},
@@ -484,6 +490,7 @@ export default defineParamConfig({
       retainDays: 90,
     },
     logs: {
+      level: "info",
       format: "json",
       retainDays: 14,
       artifactLargeLogs: true,
@@ -517,7 +524,7 @@ implementation.
 ```ts
 type AppConfig = {
   name: string;
-  environment: "development" | "staging" | "production";
+  environment: "development" | "test" | "staging" | "production";
   timezone: string;
   publicBaseUrl?: string;
 };
@@ -558,7 +565,7 @@ type DatabaseConfig = {
   url: SecretRef;
   provider: "local" | "neon" | "supabase" | "custom";
   provisioningMode: "local-postgres" | "existing-url" | "managed-neon" | "managed-supabase";
-  ssl: boolean | "require" | "prefer";
+  ssl: boolean | "require";
   pool?: {
     max?: number;
     idleTimeoutSeconds?: number;
@@ -821,10 +828,19 @@ type RuntimesConfig = {
 
 type CliRuntimeConfig = {
   enabled: boolean;
+  adapter?: "direct-cli" | "ai-sdk-harness";
   command: string;
   args?: string[];
   workspacesDir: string;
   startupCheck?: "require" | "warn" | "skip";
+  harness?: {
+    packageName: string;
+    sandbox: {
+      provider: "vercel" | "just-bash";
+      runtime?: string;
+      ports?: number[];
+    };
+  };
   env?: Record<string, string | SecretRef>;
   personalityInjection?: {
     enabled: boolean;
@@ -905,6 +921,10 @@ Default target posture:
 
 - Codex is enabled and required because it is the first/default main actor
   runtime.
+- Codex defaults to `adapter: "direct-cli"` so it runs the installed local
+  Codex CLI on the host.
+- `adapter: "ai-sdk-harness"` remains valid for an explicit sandboxed harness
+  mode when a supported sandbox provider is configured.
 - OpenCode is enabled but warning-only at startup until its adapter is ready.
 - Antigravity is enabled but warning-only at startup until its adapter is ready.
 
@@ -949,7 +969,6 @@ Detailed tool behavior lives in `docs/TOOLS.md`.
 
 ```ts
 type ToolsConfig = {
-  safeAutoRun: string[];
   disabled?: string[];
   policies?: Record<string, ToolPolicyConfig>;
   mcp?: McpToolsConfig;
@@ -991,6 +1010,10 @@ type ToolExecutionConfig = {
   maxConcurrentToolCalls: number;
 };
 ```
+
+In the current implementation, the safe auto-run list lives at
+`actionReview.safeAutoRunTools` so command permission policy stays next to
+Action Review. Future tool-specific policy can still live under `tools`.
 
 The safe auto-run list should stay small.
 
@@ -1181,7 +1204,6 @@ Detailed observability behavior lives in `docs/OBSERVABILITY.md`.
 
 ```ts
 type ObservabilityConfig = {
-  logLevel: "debug" | "info" | "warn" | "error";
   auditEnabled: boolean;
   redactSecrets: boolean;
   traces: {
@@ -1200,6 +1222,7 @@ type ObservabilityConfig = {
     retainDays?: number;
   };
   logs: {
+    level: "debug" | "info" | "warn" | "error";
     format: "json";
     retainDays?: number;
     artifactLargeLogs: boolean;
@@ -1289,6 +1312,7 @@ Target contents:
 # Database
 DATABASE_PROVIDER=local
 DATABASE_PROVISIONING_MODE=local-postgres
+DATABASE_SSL=false
 DATABASE_URL=postgresql://param:replace_me@127.0.0.1:5432/param
 
 # Telegram

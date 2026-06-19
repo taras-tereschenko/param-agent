@@ -20,10 +20,14 @@
     "create-local-config": "bun scripts/create-local-config.ts"
   },
   "dependencies": {
+    "@ai-sdk/harness": "^1.0.0-beta.20",
+    "@ai-sdk/harness-codex": "^1.0.0-beta.16",
+    "@ai-sdk/sandbox-vercel": "^1.0.0-beta.20",
     "@chat-adapter/state-pg": "^4.30.0",
     "@chat-adapter/telegram": "^4.30.0",
     "@clack/prompts": "^1.5.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "ai": "^7.0.0-beta.182",
     "chat": "^4.30.0",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.25",

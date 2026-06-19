@@ -851,11 +851,23 @@ Detailed UI behavior lives in `docs/UI.md`.
 ```ts
 type RenderUiOutputPayload = {
   surfaceId: Id;
-  target: "current_session" | "mini_app";
+  target: "current_session" | "telegram_rich_message" | "mini_app";
   specVersion: 1;
-  schema: "param.card" | "param.form" | "param.mini_app" | string;
+  schema:
+    | "param.rich_text"
+    | "param.card"
+    | "param.form"
+    | "param.table"
+    | "param.status"
+    | "param.mini_app"
+    | string;
   spec: JsonObject;
   theme?: UiThemePatch;
+  delivery?: {
+    prefer?: "telegram_rich_message" | "telegram_message" | "mini_app";
+    allowDraftStreaming?: boolean;
+    fallback?: ("telegram_message" | "mini_app" | "artifact")[];
+  };
   callbacks?: {
     actionId: string;
     label: string;
@@ -866,6 +878,13 @@ type RenderUiOutputPayload = {
 ```
 
 The UI Renderer validates specs and maps them to platform features.
+
+`telegram_rich_message` asks the renderer to build a Telegram Rich Message from
+the validated UI spec. The actor must not emit raw Telegram HTML or Markdown.
+
+`allowDraftStreaming` is only a hint. The Telegram adapter decides whether
+`sendRichMessageDraft` is supported for the target chat and must still send a
+final durable message when the output is complete.
 
 `theme` can tune approved shadcn CSS variable tokens for the surface. Persistent
 theme/profile changes are state-changing actions and go through Action Review.

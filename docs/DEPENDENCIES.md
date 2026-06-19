@@ -108,29 +108,48 @@ not use that fact as a reason to choose `pg` for its own database module.
 Add direct `pg` / `@types/pg` only if Param needs to pass a custom `pg.Pool`
 into Chat SDK state or integrate with a package that requires node-postgres.
 
-AI SDK:
+AI SDK and agent harnesses:
 
 ```text
 ai
+@ai-sdk/harness
+@ai-sdk/harness-codex
+@ai-sdk/sandbox-vercel
 ```
 
-AI SDK is optional in the default build.
+Param includes AI SDK harness packages for the optional sandboxed Codex runtime
+adapter mode.
 
-Param starts with Codex CLI through the Codex runtime adapter because that uses
-the existing Codex subscription path. Param should not make direct paid API
-model calls by default.
+Param starts with the local Codex CLI through the Codex runtime adapter because
+that uses the existing Codex subscription path and can run on the VPS/native
+host. Param should not make direct paid API model calls by default.
 
-Add `ai` only when an implemented feature needs AI SDK primitives, such as
-structured object generation, telemetry helpers, generated UI data, eval
-helpers, or an adapter experiment.
+`HarnessAgent` gives Param an official AI SDK surface for established agent
+harnesses such as Codex while preserving sessions, sandboxed workspaces, skills,
+compaction, runtime configuration, and stream compatibility.
 
-AI SDK is not Param's runtime adapter system. Codex, OpenCode, Antigravity, and
+AI SDK is still not Param's runtime boundary. Codex, OpenCode, Antigravity, and
 other CLIs still sit behind `src/runtimes/` adapters because Param must control
-process lifecycle, workspaces, steering, output buffering, artifacts, Action
-Review, and audit.
+session routing, workspaces, steering, output buffering, artifacts, Action
+Review, audit, and channel delivery.
 
-AI SDK community providers for Codex CLI or OpenCode can be tested inside those
-runtime adapters, but they do not replace the adapters.
+The Codex adapter should implement local direct CLI control first. It can also
+support `HarnessAgent` with `@ai-sdk/harness-codex` for sandboxed sessions.
+`@ai-sdk/sandbox-vercel` is the currently supported sandbox provider for that
+harness path, but it is not the default VPS actor runtime.
+
+Install AI SDK harness packages from the `beta` dist-tag when available. Use
+canary only when a needed harness package has no beta release yet. Install them
+with Bun and let `bun.lock` pin exact resolved versions.
+
+Do not add `eve` to the default dependency set for now. Eve was evaluated as a
+Vercel agent framework with durable sessions, channels, tools, skills,
+subagents, schedules, evals, and sandboxing, but Param keeps its own Telegram
+channel, deterministic orchestrator, Action Review, memory, and runtime adapter
+boundaries. Eve can be reconsidered later as a reference pattern or optional
+runtime adapter after the core Param loop is working.
+
+Do not use AI SDK provider packages for direct paid model calls by default.
 
 Optional provider packages are added only when enabled in config:
 
@@ -143,8 +162,9 @@ Optional provider packages are added only when enabled in config:
 These provider packages are for a future explicit API-backed runtime. They are
 not bootstrap dependencies.
 
-Optional community provider packages are added only after adapter tests prove
-they preserve Param's runtime contract:
+Optional community provider packages are no longer the preferred Codex path.
+They can still be tested only after adapter tests prove they preserve Param's
+runtime contract:
 
 ```text
 ai-sdk-provider-codex-cli
@@ -255,8 +275,11 @@ Do not add a logging framework until the local logger becomes painful.
 Default tests use Bun:
 
 ```text
-bun test
+bun run test
 ```
+
+`bun run test` is the fast unit suite and does not require a live database.
+`bun run test:db` is the explicit Postgres integration suite.
 
 Do not add Jest or Vitest by default.
 
@@ -317,17 +340,20 @@ Target scripts for the first scaffold:
 ```json
 {
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "bun test",
-    "dev:app": "bun --watch src/app/main.ts",
+    "dev": "bun run --hot src/app/main.ts",
     "dev:worker": "bun --watch src/worker/main.ts",
-    "start:app": "bun run src/app/main.ts",
-    "start:worker": "bun run src/worker/main.ts",
+    "start": "bun src/app/main.ts",
+    "start:worker": "bun src/worker/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test ./tests/config.test.ts ./tests/setup.test.ts ./tests/db.test.ts",
+    "check": "bun run typecheck && bun run test",
     "db:generate": "bunx drizzle-kit generate",
     "db:migrate": "bun scripts/db-migrate.ts",
     "db:check": "bun scripts/db-check.ts",
-    "doctor": "bun run scripts/doctor.ts",
-    "install": "bun run scripts/install.ts"
+    "test:db": "bun test ./tests/db.integration.test.ts",
+    "setup": "bun scripts/setup.ts",
+    "doctor": "bun scripts/doctor.ts",
+    "create-local-config": "bun scripts/create-local-config.ts"
   }
 }
 ```

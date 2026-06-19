@@ -285,12 +285,17 @@ if (!databaseUrl) {
           .update(jobs)
           .set({ lockExpiresAt: new Date(Date.now() - 1000) })
           .where(eq(jobs.id, crashedFinalAttemptJob.id));
-        expect(
-          await jobsRepository.claimNextJob(db, {
+        const recoveredClaim = await jobsRepository.claimNextJobWithRecovery(
+          db,
+          {
             workerId: `worker-after-crash-${suffix}`,
             leaseSeconds: 60,
-          }),
-        ).toBeUndefined();
+          },
+        );
+        expect(recoveredClaim.job).toBeUndefined();
+        expect(
+          recoveredClaim.recoveredExpiredJobs.map((job) => job.id),
+        ).toContain(crashedFinalAttemptJob.id);
         const [recoveredCrashedFinalAttemptJob] = await db
           .select()
           .from(jobs)

@@ -86,7 +86,8 @@ Acceptance check:
 ```text
 bun install
 bun run typecheck
-bun test
+bun run test
+bun run check
 ```
 
 ### 2. Config And Contracts
@@ -130,6 +131,7 @@ migrations run
 events persist
 jobs can be claimed with locks
 reboot recovery query has a test
+db:check verifies extensions and migrated core tables/indexes/constraints
 ```
 
 ### 4. Telegram Channel Skeleton
@@ -191,10 +193,14 @@ incoming message -> actor job -> validated output -> delivery record
 
 Add model-backed actor behavior:
 
-- minimal Codex runtime adapter for main actor runs
+- Codex runtime adapter running the local installed Codex CLI first
+- optional AI SDK beta `HarnessAgent` mode for sandboxed Codex sessions
 - prompt packet compiler
 - structured actor output
-- buffered Codex output capture
+- harness session create/detach/resume/stop handling
+- sandbox workspace setup through the Codex adapter
+- buffered Codex stream capture
+- runtime event normalization from AI SDK-compatible stream parts
 - visible style guard
 - no-reply/reaction/reply/tool decision handling
 
@@ -204,6 +210,8 @@ Acceptance check:
 actor can reply, react, stay quiet, and request a tool
 visible text follows Param voice rules
 Codex output is buffered before Telegram delivery
+Codex harness state can resume without replaying full chat history
+Param Action Review still wraps consequential Codex actions
 ```
 
 ### 8. Action Review And Tools
@@ -285,6 +293,7 @@ scheduled wake can speak without being a fixed scheduled message
 Add richer Telegram surfaces when needed:
 
 - structured UI specs
+- Telegram Rich Message renderer
 - Telegram inline buttons/cards
 - Mini App page renderer
 - shadcn theme token patches
@@ -295,6 +304,7 @@ Acceptance check:
 ```text
 actor emits UI spec
 renderer validates it
+small structured text can render as Telegram Rich Message
 callback becomes a session event
 consequential callback goes through Action Review
 ```

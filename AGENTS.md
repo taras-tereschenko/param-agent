@@ -5,9 +5,23 @@ Start here when implementing Param.
 Do not read all docs into context. The docs are reference material. Load only
 the small set needed for the subsystem you are touching.
 
+## New Architecture Docs
+
+For current architecture/product work, read only:
+
+1. `new-docs/README.md`
+2. `new-docs/VISION.md`
+3. `new-docs/DECISIONS.md`
+4. `new-docs/ARCHITECTURE.md`
+5. `new-docs/STACK.md`
+6. `new-docs/BUILD_PLAN.md`
+
+Treat the older `docs/` folder as historical reference unless `new-docs/`
+explicitly points to it.
+
 ## Required First Read
 
-Read in this order:
+For legacy VPS-first implementation work only, read in this order:
 
 1. `docs/IMPLEMENTATION_GUIDE.md`
 2. `docs/DECISIONS.md`
@@ -15,6 +29,8 @@ Read in this order:
 4. `docs/PROJECT_STRUCTURE.md`
 
 Then read the subsystem docs named by the implementation guide.
+
+For new architecture work, skip this legacy read order and use `new-docs/`.
 
 ## Core Rules
 
@@ -25,8 +41,7 @@ Then read the subsystem docs named by the implementation guide.
 - External agent CLIs always sit behind Param runtime adapters.
 - Consequential actions go through Param Action Review.
 - Memory must be scoped and retrieved, not only stored.
-- Bun, TypeScript, Hono, Drizzle, Bun SQL, local Postgres, Zod, Chat SDK, MCP,
-  and the Codex CLI runtime adapter are the default stack.
+- The current target stack and product decisions live in `new-docs/`.
 
 ## Official Setup Rule
 

@@ -28,20 +28,63 @@ const trustedUserScopeSchema = z.union([
   }),
 ]);
 
-const cliRuntimeSchema = z.object({
+const harnessSandboxSchema = z.object({
+  provider: z.enum(["vercel", "just-bash"]),
+  runtime: z.string().min(1).optional(),
+  ports: z.array(z.number().int().positive()).optional(),
+});
+
+const harnessRuntimeSchema = z.object({
   enabled: z.boolean(),
+  adapter: z.literal("ai-sdk-harness"),
   command: z.string().min(1),
   args: z.array(z.string()).optional(),
   workspacesDir: z.string().min(1),
   startupCheck: z.enum(["require", "warn", "skip"]).optional(),
+  harness: z.object({
+    packageName: z.string().min(1),
+    sandbox: harnessSandboxSchema,
+  }),
 });
 
+const directCliRuntimeSchema = z.object({
+  enabled: z.boolean(),
+  adapter: z.literal("direct-cli").optional(),
+  command: z.string().min(1),
+  args: z.array(z.string()).optional(),
+  workspacesDir: z.string().min(1),
+  startupCheck: z.enum(["require", "warn", "skip"]).optional(),
+  harness: z.never().optional(),
+});
+
+const cliRuntimeSchema = z.union([harnessRuntimeSchema, directCliRuntimeSchema]);
+
 const hostPlatformSchema = z.enum(["linux", "macos", "windows"]);
+const appEnvironmentSchema = z.enum([
+  "development",
+  "test",
+  "staging",
+  "production",
+]);
+const databaseProviderSchema = z.enum([
+  "local",
+  "neon",
+  "supabase",
+  "custom",
+]);
+const databaseProvisioningModeSchema = z.enum([
+  "local-postgres",
+  "existing-url",
+  "managed-neon",
+  "managed-supabase",
+]);
+const databaseSslSchema = z.union([z.boolean(), z.literal("require")]);
+const logLevelSchema = z.enum(["debug", "info", "warn", "error"]);
 
 export const paramConfigSchema = z.object({
   app: z.object({
     name: z.string().min(1),
-    environment: z.enum(["development", "test", "production"]),
+    environment: appEnvironmentSchema,
     timezone: z.string().min(1),
     publicBaseUrl: z.string().url().optional(),
   }),
@@ -53,14 +96,9 @@ export const paramConfigSchema = z.object({
   }),
   database: z.object({
     url: secretRefSchema,
-    provider: z.enum(["local", "managed", "existing-url"]),
-    provisioningMode: z.enum([
-      "local-postgres",
-      "existing-url",
-      "managed-neon",
-      "managed-supabase",
-    ]),
-    ssl: z.boolean(),
+    provider: databaseProviderSchema,
+    provisioningMode: databaseProvisioningModeSchema,
+    ssl: databaseSslSchema,
     pool: z.object({
       max: z.number().int().positive(),
       idleTimeoutSeconds: z.number().int().positive(),
@@ -124,11 +162,24 @@ export const paramConfigSchema = z.object({
     voiceProfile: z.string().min(1),
     contractSet: z.string().min(1),
   }),
-  runtimes: z.object({
-    codex: cliRuntimeSchema.optional(),
-    opencode: cliRuntimeSchema.optional(),
-    antigravity: cliRuntimeSchema.optional(),
-  }),
+  runtimes: z
+    .object({
+      codex: cliRuntimeSchema.optional(),
+      opencode: cliRuntimeSchema.optional(),
+      antigravity: cliRuntimeSchema.optional(),
+    })
+    .superRefine((runtimes, ctx) => {
+      for (const runtimeName of ["opencode", "antigravity"] as const) {
+        if (runtimes[runtimeName]?.adapter === "ai-sdk-harness") {
+          ctx.addIssue({
+            code: "custom",
+            path: [runtimeName, "adapter"],
+            message:
+              "AI SDK harness adapter mode is only enabled for Codex right now",
+          });
+        }
+      }
+    }),
   actionReview: z.object({
     trustedApprovalRequiredForConsequentialActions: z.boolean(),
     approvalTimeoutMinutes: z.number().int().positive(),
@@ -136,6 +187,7 @@ export const paramConfigSchema = z.object({
   }),
   observability: z.object({
     logs: z.object({
+      level: logLevelSchema,
       format: z.literal("json"),
       artifactLargeLogs: z.boolean(),
     }),
@@ -150,12 +202,7 @@ export const paramConfigSchema = z.object({
       }),
     }),
     serviceUser: z.string().min(1),
-    db: z.enum([
-      "local-postgres",
-      "existing-url",
-      "managed-neon",
-      "managed-supabase",
-    ]),
+    db: databaseProvisioningModeSchema,
     owner: z
       .object({
         promptOnFirstInstall: z.boolean(),
