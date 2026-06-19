@@ -262,13 +262,44 @@ Expected later additions:
 - browser/runtime adapters
 - image-generation adapter
 
-Not default right now:
+## Deployment
 
-- Docker
-- Redis
-- Temporal
-- custom plugin ecosystem before Eve/MCP tools are exhausted
-- direct paid model API calls as the assumed default
+Param is intended to deploy on Vercel first.
+
+Deployment shape:
+
+```text
+GitHub repo
+  -> Vercel project
+  -> Eve build output
+  -> Telegram webhook
+  -> managed Postgres / memory storage
+  -> sandbox or runner for native jobs
+```
+
+Expected setup:
+
+- deploy the Eve app to Vercel
+- set Vercel environment variables
+- configure `TELEGRAM_BOT_TOKEN`
+- configure `TELEGRAM_WEBHOOK_SECRET_TOKEN`
+- register Telegram webhook to `/eve/v1/telegram`
+- connect managed Postgres when memory/storage lands
+- add sandbox/native runner credentials when native tools land
+- keep production secrets in Vercel env or a proper secret store
+
+Local development:
+
+```bash
+bun install
+bun x eve dev
+```
+
+Production should not rely on a long-running local process.
+
+If Vercel Sandbox is not enough for some native/browser/code task, Param can use
+a separate runner behind a runtime adapter without changing the main deployment
+shape.
 
 ## Build Order
 
