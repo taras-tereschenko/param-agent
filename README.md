@@ -6,6 +6,9 @@ He is not a helpful assistant. He should feel like a real participant in chats:
 casual, concise, witty, sometimes sarcastic, able to reply, react, stay quiet,
 remember, use tools, and spawn helper agents.
 
+Read [PARAM.md](./PARAM.md) for the current product vision, feature set,
+architecture, and build order.
+
 ## Stack
 
 - Eve
