@@ -251,12 +251,11 @@ Current repo starts with:
 - Bun
 - Telegram channel
 - Vercel/serverless direction
+- Neon/Postgres through Drizzle for durable profile and memory storage
 
 Expected later additions:
 
-- managed Postgres, likely Neon
 - pgvector for memory search
-- Drizzle if we own database schema directly
 - MCP where useful
 - Vercel Sandbox or equivalent runners
 - browser/runtime adapters
@@ -284,7 +283,7 @@ Expected setup:
 - configure `TELEGRAM_BOT_TOKEN`
 - configure `TELEGRAM_WEBHOOK_SECRET_TOKEN`
 - register Telegram webhook to `/eve/v1/telegram`
-- connect managed Postgres when memory/storage lands
+- connect managed Postgres for profile and memory storage
 - add sandbox/native runner credentials when native tools land
 - keep production secrets in Vercel env or a proper secret store
 

@@ -8,19 +8,27 @@
   },
   "scripts": {
     "build": "eve build",
+    "db:check": "bun scripts/db-check.ts",
+    "db:extensions": "bun scripts/db-extensions.ts",
+    "db:generate": "bunx drizzle-kit generate",
+    "db:migrate": "bun run db:extensions && bunx drizzle-kit migrate",
     "dev": "eve dev",
     "start": "eve start",
     "typecheck": "tsgo"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "@vercel/connect": "0.2.2",
     "ai": "7.0.0-beta.178",
+    "drizzle-orm": "^0.45.2",
     "eve": "^0.11.6",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/node": "24.x",
-    "@typescript/native-preview": "7.0.0-dev.20260523.1"
+    "@typescript/native-preview": "7.0.0-dev.20260523.1",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10"
   },
   "overrides": {
     "ai": "7.0.0-beta.178"

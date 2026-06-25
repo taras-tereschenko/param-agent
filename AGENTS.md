@@ -10,7 +10,8 @@ Read `PARAM.md` before making product or architecture changes.
 
 Keep this repo small. Prefer Eve's filesystem conventions:
 
-- `agent/instructions.md` for core behavior
+- `agent/instructions.ts` for dynamic core behavior and memory/session context
+- `agent/lib/base-instructions.ts` for Param's stable personality and rules
 - `agent/agent.ts` for runtime config
 - `agent/channels/` for channels
 - `agent/tools/` for tools
