@@ -40,6 +40,10 @@ your env. Configure `PARAM_ALLOWED_TELEGRAM_USER_IDS`,
 testing with real chats. Empty allowed lists deny Telegram traffic unless
 `PARAM_ALLOW_UNRESTRICTED_TELEGRAM=true`.
 
+Set `PARAM_TRUSTED_TELEGRAM_MENTIONS` to comma-separated Telegram handles, like
+`@alice,@bob`, so group approval prompts can ping the trusted reviewers. The
+IDs in `PARAM_TRUSTED_TELEGRAM_USER_IDS` are still the authority check.
+
 After deployment, set `PARAM_PUBLIC_BASE_URL` to the public HTTPS app origin,
 then register the webhook:
 

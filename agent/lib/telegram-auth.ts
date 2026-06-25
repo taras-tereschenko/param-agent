@@ -3,16 +3,19 @@ export interface SessionAuthLike {
   readonly principalId: string;
 }
 
-export function csvSet(name: string) {
+export function csvList(name: string) {
   const raw = process.env[name]?.trim();
-  if (!raw) return undefined;
+  if (!raw) return [];
 
-  return new Set(
-    raw
-      .split(",")
-      .map(part => part.trim())
-      .filter(Boolean),
-  );
+  return raw
+    .split(",")
+    .map(part => part.trim())
+    .filter(Boolean);
+}
+
+export function csvSet(name: string) {
+  const values = csvList(name);
+  return values.length > 0 ? new Set(values) : undefined;
 }
 
 export function envFlag(name: string, fallback = false) {
@@ -55,4 +58,8 @@ export function isAllowedTelegramChatId(chatId: string | null | undefined) {
   const allowedChats = csvSet("PARAM_ALLOWED_TELEGRAM_CHAT_IDS");
   if (!allowedChats) return isUnrestrictedTelegramAccessAllowed();
   return Boolean(chatId && allowedChats.has(chatId));
+}
+
+export function trustedTelegramMentions() {
+  return csvList("PARAM_TRUSTED_TELEGRAM_MENTIONS");
 }

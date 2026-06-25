@@ -79,6 +79,11 @@ function isAllowedMessage(message: TelegramMessage) {
   return false;
 }
 
+function isApprovalReplyText(message: TelegramMessage) {
+  const text = (message.text || message.caption).trim().toLowerCase();
+  return text === "approve" || text === "deny";
+}
+
 export function telegramPolicyDecision(
   message: TelegramMessage,
   botUsername: string | undefined,
@@ -98,6 +103,15 @@ export function telegramPolicyDecision(
 
   const auth = defaultTelegramAuth(message);
   if (!auth) {
+    return null;
+  }
+
+  if (
+    reason === "reply"
+    && isGroup(message.chat.type)
+    && isApprovalReplyText(message)
+    && !isTrustedTelegramAuth(auth)
+  ) {
     return null;
   }
 

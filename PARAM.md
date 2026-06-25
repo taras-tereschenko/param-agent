@@ -147,6 +147,14 @@ If no trusted user is present in the chat, Param can request approval by DM.
 Approval must be tied to the exact proposal, requester, approver, action,
 target, and scope.
 
+Current Telegram approval flow uses Eve HITL inline buttons. Param wraps
+approval prompts as Action Review messages, pings globally configured trusted
+mentions in groups, only accepts approval callbacks from trusted Telegram user
+IDs, and blocks untrusted `approve` / `deny` reply attempts.
+
+Durable Param-owned approval audit records, chat-specific trusted reviewer
+mapping, and DM fallback are later Action Review work.
+
 Safe auto-run tools are allowed, but the list must stay small.
 
 ## Architecture
