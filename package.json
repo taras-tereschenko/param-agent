@@ -12,6 +12,7 @@
     "db:extensions": "bun scripts/db-extensions.ts",
     "db:generate": "bunx drizzle-kit generate",
     "db:migrate": "bun run db:extensions && bunx drizzle-kit migrate",
+    "db:smoke": "bun scripts/db-smoke.ts",
     "dev": "eve dev",
     "start": "eve start",
     "telegram:me": "bun scripts/telegram.ts me",

@@ -55,14 +55,20 @@ If `TELEGRAM_WEBHOOK_URL` is set instead, it must be the full URL ending in
 Database:
 
 ```bash
-bun run db:generate
 bun run db:migrate
 bun run db:check
+bun run db:smoke
 ```
 
-`DATABASE_URL` should point at Postgres. Neon is the expected serverless
-default. Migrations are committed; do not use `drizzle-kit push` for repo schema
+`DATABASE_URL` should point at Neon/serverless Postgres for the current runtime
+client. Migrations are committed; do not use `drizzle-kit push` for repo schema
 changes.
+
+`db:smoke` writes a temporary profile plus private and shared memory, verifies
+that context loading can see them, then deletes the temporary rows.
+
+When changing schema, run `bun run db:generate` and commit the generated
+migration.
 
 Run locally:
 

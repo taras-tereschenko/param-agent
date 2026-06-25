@@ -251,7 +251,7 @@ Current repo starts with:
 - Bun
 - Telegram channel
 - Vercel/serverless direction
-- Neon/Postgres through Drizzle for durable profile and memory storage
+- Neon/serverless Postgres through Drizzle for durable profile and memory storage
 
 Expected later additions:
 
