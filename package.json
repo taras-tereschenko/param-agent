@@ -14,6 +14,10 @@
     "db:migrate": "bun run db:extensions && bunx drizzle-kit migrate",
     "dev": "eve dev",
     "start": "eve start",
+    "telegram:me": "bun scripts/telegram.ts me",
+    "telegram:webhook:delete": "bun scripts/telegram.ts webhook:delete",
+    "telegram:webhook:get": "bun scripts/telegram.ts webhook:get",
+    "telegram:webhook:set": "bun scripts/telegram.ts webhook:set",
     "typecheck": "tsgo"
   },
   "dependencies": {

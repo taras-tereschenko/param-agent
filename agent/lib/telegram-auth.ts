@@ -32,12 +32,27 @@ export function telegramUserIdFromAuth(auth: SessionAuthLike | null | undefined)
   return parts.at(-1);
 }
 
-export function isTrustedTelegramAuth(auth: SessionAuthLike | null | undefined) {
+export function isTrustedTelegramUserId(userId: string | null | undefined) {
   const trusted = csvSet("PARAM_TRUSTED_TELEGRAM_USER_IDS");
-  const userId = telegramUserIdFromAuth(auth);
   return Boolean(userId && trusted?.has(userId));
+}
+
+export function isTrustedTelegramAuth(auth: SessionAuthLike | null | undefined) {
+  return isTrustedTelegramUserId(telegramUserIdFromAuth(auth));
 }
 
 export function isUnrestrictedTelegramAccessAllowed() {
   return envFlag("PARAM_ALLOW_UNRESTRICTED_TELEGRAM", false);
+}
+
+export function isAllowedTelegramPrivateUserId(userId: string | null | undefined) {
+  const allowedUsers = csvSet("PARAM_ALLOWED_TELEGRAM_USER_IDS");
+  if (!allowedUsers) return isUnrestrictedTelegramAccessAllowed();
+  return Boolean(userId && allowedUsers.has(userId));
+}
+
+export function isAllowedTelegramChatId(chatId: string | null | undefined) {
+  const allowedChats = csvSet("PARAM_ALLOWED_TELEGRAM_CHAT_IDS");
+  if (!allowedChats) return isUnrestrictedTelegramAccessAllowed();
+  return Boolean(chatId && allowedChats.has(chatId));
 }

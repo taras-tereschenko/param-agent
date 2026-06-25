@@ -1,9 +1,13 @@
 import { telegramChannel } from "eve/channels/telegram";
 import { STAY_QUIET_TOKEN } from "../lib/base-instructions.js";
 import { telegramPolicyDecision } from "../lib/telegram-policy.js";
+import { verifyParamTelegramWebhook } from "../lib/telegram-webhook.js";
 
 export default telegramChannel({
   botUsername: process.env.TELEGRAM_BOT_USERNAME ?? "param_bot",
+  credentials: {
+    webhookVerifier: verifyParamTelegramWebhook,
+  },
   uploadPolicy: {
     allowedMediaTypes: ["image/*", "application/pdf", "text/plain"],
     maxBytes: 10 * 1024 * 1024,

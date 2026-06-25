@@ -1,5 +1,10 @@
 import { defaultTelegramAuth, type TelegramMessage } from "eve/channels/telegram";
-import { csvSet, envFlag, isTrustedTelegramAuth, isUnrestrictedTelegramAccessAllowed } from "./telegram-auth.js";
+import {
+  envFlag,
+  isAllowedTelegramChatId,
+  isAllowedTelegramPrivateUserId,
+  isTrustedTelegramAuth,
+} from "./telegram-auth.js";
 
 export type TelegramDispatchReason =
   | "private"
@@ -63,17 +68,12 @@ function dispatchReason(message: TelegramMessage, botUsername: string | undefine
 }
 
 function isAllowedMessage(message: TelegramMessage) {
-  const allowedUsers = csvSet("PARAM_ALLOWED_TELEGRAM_USER_IDS");
-  const allowedChats = csvSet("PARAM_ALLOWED_TELEGRAM_CHAT_IDS");
-
   if (message.chat.type === "private") {
-    if (!allowedUsers) return isUnrestrictedTelegramAccessAllowed();
-    return message.from?.id ? allowedUsers.has(message.from.id) : false;
+    return isAllowedTelegramPrivateUserId(message.from?.id);
   }
 
   if (isGroup(message.chat.type)) {
-    if (!allowedChats) return isUnrestrictedTelegramAccessAllowed();
-    return allowedChats.has(message.chat.id);
+    return isAllowedTelegramChatId(message.chat.id);
   }
 
   return false;
