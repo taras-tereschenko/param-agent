@@ -14,6 +14,8 @@ interface ActionReviewRequest {
   }[];
 }
 
+const TELEGRAM_APPROVAL_TEXT_MAX_LENGTH = 3900;
+
 function isGroupChat(chatType: TelegramChannelState["chatType"]) {
   return chatType === "group" || chatType === "supergroup";
 }
@@ -29,16 +31,43 @@ function inputPreview(input: unknown) {
   const json = JSON.stringify(input, null, 2);
   if (!json) return undefined;
 
-  return json.length > 900 ? `${json.slice(0, 900)}...` : json;
+  return json;
 }
 
-export function formatActionReviewText(input: {
+function tooLargeActionReviewText(input: {
+  readonly request: ActionReviewRequest;
+  readonly state: TelegramChannelState;
+}) {
+  const lines = ["action review"];
+
+  if (input.request.action?.toolName) {
+    lines.push(`tool: ${input.request.action.toolName}`);
+  }
+
+  if (input.state.triggeringUserId) {
+    lines.push(`requested by: ${input.state.triggeringUserId}`);
+  }
+
+  lines.push(
+    "",
+    "proposal is too large to review exactly in one Telegram message",
+    "approval buttons hidden so nobody approves partial context",
+    "ask Param to split this into a smaller action",
+  );
+
+  return lines.join("\n");
+}
+
+export function formatActionReviewMessage(input: {
   readonly renderedText: string;
   readonly request: ActionReviewRequest;
   readonly state: TelegramChannelState;
 }) {
   if (!isApprovalRequest(input.request)) {
-    return input.renderedText;
+    return {
+      allowReplyMarkup: true,
+      text: input.renderedText,
+    };
   }
 
   const lines: string[] = [];
@@ -67,5 +96,20 @@ export function formatActionReviewText(input: {
   lines.push("");
   lines.push(input.renderedText);
 
-  return lines.join("\n");
+  const text = lines.join("\n");
+  if (text.length <= TELEGRAM_APPROVAL_TEXT_MAX_LENGTH) {
+    return {
+      allowReplyMarkup: true,
+      text,
+    };
+  }
+
+  return {
+    allowReplyMarkup: false,
+    text: tooLargeActionReviewText(input),
+  };
+}
+
+export function formatActionReviewText(input: Parameters<typeof formatActionReviewMessage>[0]) {
+  return formatActionReviewMessage(input).text;
 }

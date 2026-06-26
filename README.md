@@ -18,6 +18,9 @@ architecture.
 - Vercel/Eve durable agent runtime
 - Sandboxes or runtime adapters for native work
 
+Eve's built-in shell, file, and web tools are disabled in this repo until those
+capabilities return as Param-owned adapters with Action Review.
+
 ## Setup
 
 Eve requires Node.js 24.

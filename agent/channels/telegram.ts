@@ -3,7 +3,7 @@ import {
   renderTelegramInputRequest,
   telegramChannel,
 } from "eve/channels/telegram";
-import { formatActionReviewText } from "../lib/action-review.js";
+import { formatActionReviewMessage } from "../lib/action-review.js";
 import { STAY_QUIET_TOKEN } from "../lib/base-instructions.js";
 import { telegramPolicyDecision } from "../lib/telegram-policy.js";
 import { verifyParamTelegramWebhook } from "../lib/telegram-webhook.js";
@@ -53,16 +53,17 @@ export default telegramChannel({
     async "input.requested"(data, channel) {
       for (const request of data.requests) {
         const rendered = renderTelegramInputRequest(request, channel.state);
+        const formatted = formatActionReviewMessage({
+          renderedText: rendered.text,
+          request,
+          state: channel.state,
+        });
         const posted = await channel.telegram.post({
-          reply_markup: rendered.replyMarkup,
-          text: formatActionReviewText({
-            renderedText: rendered.text,
-            request,
-            state: channel.state,
-          }),
+          reply_markup: formatted.allowReplyMarkup ? rendered.replyMarkup : undefined,
+          text: formatted.text,
         });
 
-        if (rendered.freeformRequestId !== undefined && posted.id) {
+        if (formatted.allowReplyMarkup && rendered.freeformRequestId !== undefined && posted.id) {
           registerTelegramFreeformPrompt(channel.state, {
             messageId: posted.id,
             requestId: rendered.freeformRequestId,

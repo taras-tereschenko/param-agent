@@ -157,6 +157,10 @@ mapping, and DM fallback are later Action Review work.
 
 Safe auto-run tools are allowed, but the list must stay small.
 
+Current implementation disables Eve's built-in shell, file, and web tools until
+Param-owned adapters wrap those capabilities with Action Review and validation.
+Approval prompts must show the exact bounded proposal being approved.
+
 ## Architecture
 
 Current direction: fresh Eve/serverless architecture.
