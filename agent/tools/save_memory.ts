@@ -56,7 +56,7 @@ export default defineTool({
   description:
     "Propose saving durable Param memory. Use only for stable, useful facts or preferences. Sensitive memory requires approval.",
   inputSchema,
-  needsApproval: always(),
+  approval: always(),
   async execute({ reason, updates }, ctx) {
     const auth = ctx.session.auth.current ?? ctx.session.auth.initiator;
     if (!auth?.principalId) {

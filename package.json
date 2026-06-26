@@ -24,9 +24,9 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "@vercel/connect": "0.2.2",
-    "ai": "7.0.0-beta.178",
+    "ai": "^7.0.2",
     "drizzle-orm": "^0.45.2",
-    "eve": "^0.11.6",
+    "eve": "^0.15.1",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -34,12 +34,6 @@
     "@typescript/native-preview": "7.0.0-dev.20260523.1",
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10"
-  },
-  "overrides": {
-    "ai": "7.0.0-beta.178"
-  },
-  "resolutions": {
-    "ai": "7.0.0-beta.178"
   },
   "engines": {
     "node": "24.x"
