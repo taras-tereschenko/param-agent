@@ -152,8 +152,12 @@ approval prompts as Action Review messages, pings globally configured trusted
 mentions in groups, only accepts approval callbacks from trusted Telegram user
 IDs, and blocks untrusted `approve` / `deny` reply attempts.
 
-Durable Param-owned approval audit records, chat-specific trusted reviewer
-mapping, and DM fallback are later Action Review work.
+Approval requests and final action results are also written to Param-owned
+Action Review audit records keyed by Eve `requestId` and action `callId`. If
+Param cannot create the audit record, Telegram approval buttons are hidden.
+
+Chat-specific trusted reviewer mapping and DM fallback are later Action Review
+work.
 
 Safe auto-run tools are allowed, but the list must stay small.
 

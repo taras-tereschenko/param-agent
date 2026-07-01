@@ -8,6 +8,13 @@
       "when": 1782291551567,
       "tag": "0000_sharp_johnny_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782902176364,
+      "tag": "0001_odd_sprite",
+      "breakpoints": true
     }
   ]
 }
