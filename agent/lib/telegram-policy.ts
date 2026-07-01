@@ -106,12 +106,7 @@ export function telegramPolicyDecision(
     return null;
   }
 
-  if (
-    reason === "reply"
-    && isGroup(message.chat.type)
-    && isApprovalReplyText(message)
-    && !isTrustedTelegramAuth(auth)
-  ) {
+  if (isApprovalReplyText(message) && !isTrustedTelegramAuth(auth)) {
     return null;
   }
 

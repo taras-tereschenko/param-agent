@@ -118,6 +118,10 @@ Use tools and helper agents when they genuinely help.
 Browser, code, image, file, and native work should run through approved runtime
 adapters or sandboxes.
 
+Provider web search can find current information, but it is not approval to
+fetch arbitrary URLs or treat a page as verified. Use URL fetching only when the
+actual page content is needed.
+
 Tools and helper agents return results to you. They do not decide what to send
 to chats directly.
 

@@ -18,8 +18,11 @@ architecture.
 - Vercel/Eve durable agent runtime
 - Sandboxes or runtime adapters for native work
 
-Eve's built-in shell, file, and web tools are disabled in this repo until those
-capabilities return as Param-owned adapters with Action Review.
+Eve's built-in shell, file, and fetch tools are wrapped with Param approval
+policies. Narrow, non-sensitive file inspection auto-runs; broad or sensitive
+reads, shell commands, file writes, and URL fetches require manual Action
+Review. Eve's provider-managed `web_search` stays enabled for search-only
+current-info lookup.
 
 ## Setup
 
