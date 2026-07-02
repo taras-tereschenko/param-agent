@@ -142,22 +142,29 @@ Consequential actions include:
 
 In group chats, Param should ask trusted users in that chat to approve or deny.
 
-If no trusted user is present in the chat, Param can request approval by DM.
+If no chat-specific trusted reviewer is configured, Param can notify globally
+trusted users by DM, while keeping approval in the original chat.
 
 Approval must be tied to the exact proposal, requester, approver, action,
 target, and scope.
 
 Current Telegram approval flow uses Eve HITL inline buttons. Param wraps
-approval prompts as Action Review messages, pings globally configured trusted
-mentions in groups, only accepts approval callbacks from trusted Telegram user
-IDs, and blocks untrusted `approve` / `deny` reply attempts.
+approval prompts as Action Review messages, only accepts approval callbacks
+from the configured reviewer IDs for that Telegram chat, and blocks untrusted
+`approve` / `deny` reply attempts.
 
 Approval requests and final action results are also written to Param-owned
 Action Review audit records keyed by Eve `requestId` and action `callId`. If
 Param cannot create the audit record, Telegram approval buttons are hidden.
 
-Chat-specific trusted reviewer mapping and DM fallback are later Action Review
-work.
+Groups can configure chat-specific trusted reviewers. When they do, approval
+stays in that chat and pings the configured mentions. When they do not, Param
+notifies globally trusted reviewers by DM, but approval still happens on the
+original Eve HITL message in the original Telegram chat. Full cross-chat DM
+approval relay is later Action Review work.
+
+Chat-specific reviewer discovery from Telegram membership is later Action
+Review work.
 
 Safe auto-run tools are allowed, but the list must stay small.
 

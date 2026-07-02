@@ -26,11 +26,52 @@ function privateMessage(input: {
   };
 }
 
+function groupReplyToParam(input: {
+  readonly fromId: string;
+  readonly text: string;
+}): TelegramMessage {
+  return {
+    attachments: [],
+    caption: "",
+    chat: {
+      id: "-100",
+      title: "Param Test",
+      type: "supergroup",
+    },
+    from: {
+      firstName: "Test",
+      id: input.fromId,
+      isBot: false,
+      username: "test_user",
+    },
+    messageId: "2",
+    replyToMessage: {
+      attachments: [],
+      caption: "",
+      chat: {
+        id: "-100",
+        title: "Param Test",
+        type: "supergroup",
+      },
+      from: {
+        firstName: "Param",
+        id: "999",
+        isBot: true,
+        username: "param_bot",
+      },
+      messageId: "1",
+      text: "action review",
+    },
+    text: input.text,
+  };
+}
+
 beforeEach(() => {
   process.env = { ...OLD_ENV };
   process.env.PARAM_ALLOWED_TELEGRAM_USER_IDS = "111,222";
-  process.env.PARAM_ALLOWED_TELEGRAM_CHAT_IDS = "";
+  process.env.PARAM_ALLOWED_TELEGRAM_CHAT_IDS = "-100";
   process.env.PARAM_TRUSTED_TELEGRAM_USER_IDS = "111";
+  process.env.PARAM_TRUSTED_TELEGRAM_USER_IDS_BY_CHAT = "";
   process.env.PARAM_ALLOW_UNRESTRICTED_TELEGRAM = "false";
 });
 
@@ -49,5 +90,32 @@ describe("telegramPolicyDecision", () => {
     const decision = telegramPolicyDecision(privateMessage({ fromId: "111", text: "approve" }), "param_bot");
 
     expect(decision?.reason).toBe("private");
+  });
+
+  test("blocks global trusted group approval words when chat-specific reviewers are configured", () => {
+    process.env.PARAM_TRUSTED_TELEGRAM_USER_IDS_BY_CHAT = JSON.stringify({
+      "-100": ["222"],
+    });
+
+    const decision = telegramPolicyDecision(
+      groupReplyToParam({ fromId: "111", text: "approve" }),
+      "param_bot",
+    );
+
+    expect(decision).toBeNull();
+  });
+
+  test("allows chat-specific reviewer group approval words", () => {
+    process.env.PARAM_TRUSTED_TELEGRAM_USER_IDS_BY_CHAT = JSON.stringify({
+      "-100": ["222"],
+    });
+
+    const decision = telegramPolicyDecision(
+      groupReplyToParam({ fromId: "222", text: "approve" }),
+      "param_bot",
+    );
+
+    expect(decision?.reason).toBe("reply");
+    expect(decision?.context).toContain("- sender is trusted: yes");
   });
 });

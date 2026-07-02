@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import {
   isAllowedTelegramChatId,
   isAllowedTelegramPrivateUserId,
+  isTrustedTelegramReviewerForChat,
   isTrustedTelegramUserId,
 } from "./telegram-auth.js";
 
@@ -51,17 +52,17 @@ function isAllowedCallback(update: TelegramRawCallbackUpdate) {
   if (!callback) return true;
 
   const fromId = asId(callback.from?.id);
-  if (!isTrustedTelegramUserId(fromId)) return false;
 
   const chat = callback.message?.chat;
   if (!chat) return false;
+  const chatId = asId(chat.id);
 
   if (chat.type === "private") {
-    return isAllowedTelegramPrivateUserId(fromId);
+    return isAllowedTelegramPrivateUserId(fromId) && isTrustedTelegramUserId(fromId);
   }
 
   if (isGroup(chat.type)) {
-    return isAllowedTelegramChatId(asId(chat.id));
+    return isAllowedTelegramChatId(chatId) && isTrustedTelegramReviewerForChat(fromId, chatId);
   }
 
   return false;

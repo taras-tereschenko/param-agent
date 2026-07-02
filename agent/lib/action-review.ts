@@ -59,6 +59,7 @@ function tooLargeActionReviewText(input: {
 }
 
 export function formatActionReviewMessage(input: {
+  readonly mentions?: readonly string[];
   readonly renderedText: string;
   readonly request: ActionReviewRequest;
   readonly state: TelegramChannelState;
@@ -71,7 +72,8 @@ export function formatActionReviewMessage(input: {
   }
 
   const lines: string[] = [];
-  const mentions = isGroupChat(input.state.chatType) ? trustedTelegramMentions() : [];
+  const mentions = input.mentions
+    ?? (isGroupChat(input.state.chatType) ? trustedTelegramMentions(input.state.chatId) : []);
   if (mentions.length > 0) {
     lines.push(mentions.join(" "));
     lines.push("");

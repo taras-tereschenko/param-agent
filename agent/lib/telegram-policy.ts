@@ -4,6 +4,7 @@ import {
   isAllowedTelegramChatId,
   isAllowedTelegramPrivateUserId,
   isTrustedTelegramAuth,
+  isTrustedTelegramReviewerForChat,
 } from "./telegram-auth.js";
 
 export type TelegramDispatchReason =
@@ -84,6 +85,18 @@ function isApprovalReplyText(message: TelegramMessage) {
   return text === "approve" || text === "deny";
 }
 
+function isTrustedForTelegramMessage(message: TelegramMessage, auth: ReturnType<typeof defaultTelegramAuth>) {
+  if (message.chat.type === "private") {
+    return isTrustedTelegramAuth(auth);
+  }
+
+  if (isGroup(message.chat.type)) {
+    return isTrustedTelegramReviewerForChat(message.from?.id, message.chat.id);
+  }
+
+  return false;
+}
+
 export function telegramPolicyDecision(
   message: TelegramMessage,
   botUsername: string | undefined,
@@ -106,7 +119,8 @@ export function telegramPolicyDecision(
     return null;
   }
 
-  if (isApprovalReplyText(message) && !isTrustedTelegramAuth(auth)) {
+  const senderIsTrusted = isTrustedForTelegramMessage(message, auth);
+  if (isApprovalReplyText(message) && !senderIsTrusted) {
     return null;
   }
 
@@ -120,7 +134,7 @@ export function telegramPolicyDecision(
     message.from?.id ? `- sender id: ${message.from.id}` : undefined,
     message.from?.username ? `- sender username: @${message.from.username}` : undefined,
     message.from?.firstName ? `- sender first name: ${message.from.firstName}` : undefined,
-    `- sender is trusted: ${isTrustedTelegramAuth(auth) ? "yes" : "no"}`,
+    `- sender is trusted: ${senderIsTrusted ? "yes" : "no"}`,
     reason === "ambient"
       ? "- this message did not directly address Param; staying quiet is often correct"
       : undefined,

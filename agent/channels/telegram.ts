@@ -4,6 +4,11 @@ import {
   telegramChannel,
 } from "eve/channels/telegram";
 import { formatActionReviewMessage, isApprovalRequest } from "../lib/action-review.js";
+import {
+  actionReviewRouteForTelegram,
+  formatDmFallbackNotice,
+  sendDmActionReviewNotifications,
+} from "../lib/action-review-routing.js";
 import { STAY_QUIET_TOKEN } from "../lib/base-instructions.js";
 import {
   recordActionReviewRequested,
@@ -66,11 +71,18 @@ export default telegramChannel({
     async "input.requested"(data, channel, ctx) {
       for (const request of data.requests) {
         if (isApprovalRequest(request)) {
+          const route = actionReviewRouteForTelegram(channel.state);
+
           try {
             await recordActionReviewRequested({
               ctx,
               event: data,
               request,
+              routing: {
+                dmReviewerTelegramUserIds:
+                  route.kind === "dm-notify" ? route.notifyReviewerTelegramUserIds : [],
+                route: route.kind,
+              },
               state: channel.state,
             });
           } catch (error) {
@@ -80,6 +92,43 @@ export default telegramChannel({
             );
             continue;
           }
+
+          const rendered = renderTelegramInputRequest(request, channel.state);
+          const formatted = formatActionReviewMessage({
+            mentions: route.kind === "chat" ? route.mentions : [],
+            renderedText: rendered.text,
+            request,
+            state: channel.state,
+          });
+
+          const posted = await channel.telegram.post({
+            reply_markup: formatted.allowReplyMarkup ? rendered.replyMarkup : undefined,
+            text: formatted.text,
+          });
+
+          if (formatted.allowReplyMarkup && rendered.freeformRequestId !== undefined && posted.id) {
+            registerTelegramFreeformPrompt(channel.state, {
+              messageId: posted.id,
+              requestId: rendered.freeformRequestId,
+            });
+          }
+
+          if (route.kind === "dm-notify" && formatted.allowReplyMarkup) {
+            const deliveredCount = await sendDmActionReviewNotifications({
+              reviewText: formatted.text,
+              reviewerTelegramUserIds: route.notifyReviewerTelegramUserIds,
+              state: channel.state,
+              telegram: channel.telegram,
+            });
+
+            await channel.telegram.post(
+              formatDmFallbackNotice({
+                deliveredCount,
+                reviewerCount: route.notifyReviewerTelegramUserIds.length,
+              }),
+            );
+          }
+          continue;
         }
 
         const rendered = renderTelegramInputRequest(request, channel.state);

@@ -47,8 +47,20 @@ testing with real chats. Empty allowed lists deny Telegram traffic unless
 `PARAM_ALLOW_UNRESTRICTED_TELEGRAM=true`.
 
 Set `PARAM_TRUSTED_TELEGRAM_MENTIONS` to comma-separated Telegram handles, like
-`@alice,@bob`, so group approval prompts can ping the trusted reviewers. The
-IDs in `PARAM_TRUSTED_TELEGRAM_USER_IDS` are still the authority check.
+`@alice,@bob`, so group approval prompts can ping the globally trusted
+reviewers. The configured reviewer IDs, not the display mentions, are the
+authority check.
+
+For group-specific in-chat reviewers, set JSON maps keyed by chat id:
+
+```bash
+PARAM_TRUSTED_TELEGRAM_USER_IDS_BY_CHAT='{"-100123":["111"]}'
+PARAM_TRUSTED_TELEGRAM_MENTIONS_BY_CHAT='{"-100123":["@alice"]}'
+```
+
+Groups without configured chat reviewers notify `PARAM_TRUSTED_TELEGRAM_USER_IDS`
+by DM, but approval still happens in the original Telegram chat. Those users
+must also be allowed DM users if they should receive notifications.
 
 After deployment, set `PARAM_PUBLIC_BASE_URL` to the public HTTPS app origin,
 then register the webhook:

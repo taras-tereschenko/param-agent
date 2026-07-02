@@ -66,6 +66,10 @@ describe("action review audit helpers", () => {
         prompt: "Approve read_file?",
         requestId: "request-1",
       },
+      routing: {
+        dmReviewerTelegramUserIds: ["111", "333"],
+        route: "dm-notify",
+      },
       state,
     });
 
@@ -92,6 +96,10 @@ describe("action review audit helpers", () => {
       channel: {
         chatId: "-100",
         triggeringUserId: "111",
+      },
+      routing: {
+        dmReviewerTelegramUserIds: ["111", "333"],
+        route: "dm-notify",
       },
     });
   });

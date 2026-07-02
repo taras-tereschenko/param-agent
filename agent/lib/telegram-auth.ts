@@ -18,6 +18,30 @@ export function csvSet(name: string) {
   return values.length > 0 ? new Set(values) : undefined;
 }
 
+function jsonStringListMap(name: string) {
+  const raw = process.env[name]?.trim();
+  if (!raw) return {};
+
+  const parsed = JSON.parse(raw) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${name} must be a JSON object of string arrays`);
+  }
+
+  const result: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (!Array.isArray(value) || !value.every(item => typeof item === "string")) {
+      throw new Error(`${name}.${key} must be a string array`);
+    }
+
+    const entries = value.map(item => item.trim()).filter(Boolean);
+    if (entries.length > 0) {
+      result[key] = entries;
+    }
+  }
+
+  return result;
+}
+
 export function envFlag(name: string, fallback = false) {
   const raw = process.env[name]?.trim().toLowerCase();
   if (!raw) return fallback;
@@ -36,8 +60,21 @@ export function telegramUserIdFromAuth(auth: SessionAuthLike | null | undefined)
 }
 
 export function isTrustedTelegramUserId(userId: string | null | undefined) {
-  const trusted = csvSet("PARAM_TRUSTED_TELEGRAM_USER_IDS");
-  return Boolean(userId && trusted?.has(userId));
+  return Boolean(userId && trustedTelegramUserIdSet().has(userId));
+}
+
+export function isTrustedTelegramReviewerForChat(
+  userId: string | null | undefined,
+  chatId: string | null | undefined,
+) {
+  if (!userId) return false;
+
+  const chatReviewerIds = trustedTelegramUserIdsForChat(chatId);
+  if (chatReviewerIds.length > 0) {
+    return chatReviewerIds.includes(userId);
+  }
+
+  return isTrustedTelegramUserId(userId);
 }
 
 export function isTrustedTelegramAuth(auth: SessionAuthLike | null | undefined) {
@@ -60,6 +97,27 @@ export function isAllowedTelegramChatId(chatId: string | null | undefined) {
   return Boolean(chatId && allowedChats.has(chatId));
 }
 
-export function trustedTelegramMentions() {
+export function trustedTelegramUserIds() {
+  return csvList("PARAM_TRUSTED_TELEGRAM_USER_IDS");
+}
+
+export function trustedTelegramUserIdSet() {
+  return new Set(trustedTelegramUserIds());
+}
+
+export function trustedTelegramUserIdsForChat(chatId: string | null | undefined) {
+  if (!chatId) return [];
+  return jsonStringListMap("PARAM_TRUSTED_TELEGRAM_USER_IDS_BY_CHAT")[chatId] ?? [];
+}
+
+export function trustedTelegramMentionsForChat(chatId: string | null | undefined) {
+  if (!chatId) return [];
+  return jsonStringListMap("PARAM_TRUSTED_TELEGRAM_MENTIONS_BY_CHAT")[chatId] ?? [];
+}
+
+export function trustedTelegramMentions(chatId?: string | null) {
+  const chatMentions = trustedTelegramMentionsForChat(chatId);
+  if (chatMentions.length > 0) return chatMentions;
+
   return csvList("PARAM_TRUSTED_TELEGRAM_MENTIONS");
 }

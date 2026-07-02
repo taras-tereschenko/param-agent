@@ -64,6 +64,11 @@ export interface InputRequestedEventForAudit {
   readonly turnId: string;
 }
 
+export interface ActionReviewRoutingForAudit {
+  readonly dmReviewerTelegramUserIds?: readonly string[];
+  readonly route: "chat" | "dm-notify";
+}
+
 export interface ActionResultEventForAudit {
   readonly error?: unknown;
   readonly result: {
@@ -94,6 +99,7 @@ export function buildActionReviewRequestRecord(input: {
   readonly ctx: SessionContextForAudit;
   readonly event: InputRequestedEventForAudit;
   readonly request: ActionReviewRequestForAudit;
+  readonly routing?: ActionReviewRoutingForAudit;
   readonly state: TelegramChannelState;
 }): NewParamActionReview {
   const requester = input.ctx.session.auth?.current ?? input.ctx.session.auth?.initiator ?? null;
@@ -106,6 +112,7 @@ export function buildActionReviewRequestRecord(input: {
     prompt: input.request.prompt,
     requestId: input.request.requestId,
     requester: principalSnapshot(requester),
+    routing: input.routing ?? null,
     session: {
       id: input.ctx.session.id,
       turnId: input.event.turnId,
