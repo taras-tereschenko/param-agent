@@ -33,6 +33,15 @@ Build in Build Order sequence so each layer sits on a green one, and keep the
 repo green at each step (`bun test`, `bun run typecheck`, `bun run build`,
 `bunx eve info --json`).
 
+Parallelize where it is safe: fan independent, interface-bounded slices out to
+implementation subagents (a self-contained adapter, a standalone module, or a
+migration plus its repo), each with a tight spec and its own worktree. Keep
+coupled or sequential work on the lead agent — anything that shares core files
+(`agent.ts`, `instructions.ts`, `channels/telegram.ts`, `schema.ts`) or depends
+on an earlier build-order layer — and have the lead integrate each slice and
+keep the app green after every merge. Do not fan out work that heavily shares
+files; the coordination cost outweighs the parallelism.
+
 Some items need live credentials or external services to finish and verify
 (Telegram bot token, `DATABASE_URL` / Neon, a Vercel account for Workflows,
 provider creds for Codex / OpenCode / Antigravity / browser / image). For each of
@@ -60,9 +69,10 @@ Implementation comes first; the full review flow comes at the very end.
 - Do not reintroduce the old VPS-first architecture docs unless explicitly
   asked.
 - Do not add Docker unless explicitly asked.
-- Do not spawn subagents for routine implementation. Run the heavy review pass
-  (the user wants it) only at the very end, after the whole goal is implemented,
-  as described in Mandate (Current Task) — never after every commit.
+- Use subagents to parallelize implementation of independent, interface-bounded
+  slices, and to run the end-of-run review pass, as described in Mandate
+  (Current Task). Do not fan out coupled or file-sharing work, and do not run the
+  review gauntlet after every commit.
 - Do not introduce extra direct model API clients unless approved. Use the Eve
   model/runtime already configured by the repo.
 - Secrets belong in `.env` or deployment env vars, not committed config.
