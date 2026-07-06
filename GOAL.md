@@ -21,9 +21,10 @@ Param replies when it feels natural for a friend in the chat to reply.
 
 ## Mandate (Current Task)
 
-Build the whole thing. Work through the entire Build Order below and close every
-item in Current Known Gaps, end to end, in this run. Do not stop after one
-increment. This is an explicit request for the full roadmap, so the build-order
+Build the whole thing. Cover every aspect of the agent described in this
+document: work through the entire Build Order below and close every item in
+Current Known Gaps, end to end, in this run. Do not stop after one increment.
+This is an explicit request for the full roadmap, so the build-order
 architecture layers (Vercel Workflows, memory review, schedules, runtime
 adapters, richer Telegram UI / Mini Apps, and the rest) are the assignment, not
 speculative additions to avoid.
@@ -40,11 +41,12 @@ the credential, gate the live path behind config, and state plainly what still
 needs infra to finish. Do not skip them and do not stall the run waiting on infra
 you do not have.
 
-Review cadence: run the multi-subagent review pass (/review, /code-review,
-/security-review) once at the very end, or at most once per completed Build Order
-step. Never re-run the full gauntlet after every atomic commit or small fix.
-Batch the fixes, then do one confirmation pass. Breadth of implementation comes
-first; keep review spend proportionate to the change.
+Review flow: implement every aspect of the agent first. Only after the whole
+goal is implemented, run the complete review flow once — spawn at least 10
+/review, /code-review, and /security-review subagents, fix everything they
+report, then re-run the flow, and repeat until the review reports nothing. Do
+not run this gauntlet after every atomic commit or per build-order step.
+Implementation comes first; the full review flow comes at the very end.
 
 ## Working Rules For The Coding Agent
 
@@ -58,9 +60,9 @@ first; keep review spend proportionate to the change.
 - Do not reintroduce the old VPS-first architecture docs unless explicitly
   asked.
 - Do not add Docker unless explicitly asked.
-- Do not spawn subagents for routine implementation. Use subagents for the heavy
-  review pass (the user has asked for it), following the review cadence in
-  Mandate (Current Task): at the end or per Build Order step, never per commit.
+- Do not spawn subagents for routine implementation. Run the heavy review pass
+  (the user wants it) only at the very end, after the whole goal is implemented,
+  as described in Mandate (Current Task) — never after every commit.
 - Do not introduce extra direct model API clients unless approved. Use the Eve
   model/runtime already configured by the repo.
 - Secrets belong in `.env` or deployment env vars, not committed config.
