@@ -32,6 +32,11 @@ describe("planTelegramDelivery", () => {
     expect(planTelegramDelivery("line one\nline two").messages).toEqual(["line one\nline two"]);
   });
 
+  test("splits CRLF and bare-CR blank lines into separate bubbles", () => {
+    expect(planTelegramDelivery("yo\r\n\r\nwhat's up").messages).toEqual(["yo", "what's up"]);
+    expect(planTelegramDelivery("yo\r\rwhat's up").messages).toEqual(["yo", "what's up"]);
+  });
+
   test("trims bubbles and drops empty ones", () => {
     expect(planTelegramDelivery("  yo  \n\n   \n\n  bet ").messages).toEqual(["yo", "bet"]);
   });
@@ -60,9 +65,21 @@ describe("planTelegramDelivery", () => {
     expect(plan.messages).toEqual(["a\n\nb\n\nc"]);
   });
 
+  test("keeps every bubble when the count exactly equals the cap", () => {
+    const plan = planTelegramDelivery("a\n\nb\n\nc", { maxMessages: 3 });
+    expect(plan.messages).toEqual(["a", "b", "c"]);
+  });
+
   test("treats a sub-1 cap as 1 rather than dropping content", () => {
     expect(planTelegramDelivery("a\n\nb", { maxMessages: 0 }).messages).toEqual(["a\n\nb"]);
     expect(planTelegramDelivery("a\n\nb", { maxMessages: -3 }).messages).toEqual(["a\n\nb"]);
+  });
+
+  test("falls back to the default cap for a non-finite cap", () => {
+    expect(planTelegramDelivery("a\n\nb", { maxMessages: Number.NaN }).messages).toEqual(["a", "b"]);
+    expect(
+      planTelegramDelivery("a\n\nb", { maxMessages: Number.POSITIVE_INFINITY }).messages,
+    ).toEqual(["a", "b"]);
   });
 
   test("floors fractional caps", () => {
@@ -74,6 +91,12 @@ describe("planTelegramDelivery", () => {
     const plan = planTelegramDelivery("a\n\nb\n\nc");
     expect(plan.messages).toEqual(["a", "b", "c"]);
     expect(plan.messages.length).toBeLessThanOrEqual(DEFAULT_MAX_TELEGRAM_MESSAGES);
+  });
+
+  test("applies the default cap and merges overflow when no cap is passed", () => {
+    const plan = planTelegramDelivery("a\n\nb\n\nc\n\nd\n\ne\n\nf\n\ng");
+    expect(plan.messages).toHaveLength(DEFAULT_MAX_TELEGRAM_MESSAGES);
+    expect(plan.messages).toEqual(["a", "b", "c", "d", "e", "f\n\ng"]);
   });
 });
 

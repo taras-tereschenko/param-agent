@@ -12,9 +12,9 @@ export interface TelegramDeliveryPlan {
 
 export interface PlanTelegramDeliveryOptions {
   /**
-   * Anti-flood ceiling on the number of separate Telegram bubbles for one
-   * actor turn. Overflow is merged into the last bubble instead of dropped so
-   * no content is lost. Values below 1 are treated as 1.
+   * Ceiling on the number of separate Telegram bubbles for one completed reply.
+   * Overflow is merged into the last bubble instead of dropped so no content is
+   * lost. Non-finite or sub-1 values fall back to the default.
    */
   readonly maxMessages?: number;
 }
@@ -26,7 +26,7 @@ export interface PlanTelegramDeliveryOptions {
  * with {@link STAY_QUIET_TOKEN}. This owns the delivery decisions the channel
  * used to make inline: suppressing the stay-quiet sentinel (even when the model
  * leaves it inline), splitting into separate bubbles, trimming, dropping empty
- * bubbles, and capping the burst so Param never floods a chat.
+ * bubbles, and capping the number of bubbles per reply so a burst stays small.
  *
  * The per-message 4096-character Telegram limit is intentionally left to the
  * channel's `post`, which already splits over-long text.
@@ -37,9 +37,12 @@ export function planTelegramDelivery(
 ): TelegramDeliveryPlan {
   if (!text) return { messages: [] };
 
+  // Normalize CRLF/CR so blank-line splitting works regardless of line endings.
+  const normalized = text.replace(/\r\n?/gu, "\n");
+
   // Remove the stay-quiet sentinel wherever it appears, not only when a bubble
   // is exactly the token, so it can never leak into a real message.
-  const withoutQuietToken = text.split(STAY_QUIET_TOKEN).join("");
+  const withoutQuietToken = normalized.split(STAY_QUIET_TOKEN).join("");
 
   const bubbles = withoutQuietToken
     .split(/\n{2,}/u)
@@ -48,7 +51,7 @@ export function planTelegramDelivery(
 
   if (bubbles.length === 0) return { messages: [] };
 
-  const cap = Math.max(1, Math.floor(options.maxMessages ?? DEFAULT_MAX_TELEGRAM_MESSAGES));
+  const cap = resolveCap(options.maxMessages);
   if (bubbles.length <= cap) return { messages: bubbles };
 
   const head = bubbles.slice(0, cap - 1);
@@ -57,10 +60,19 @@ export function planTelegramDelivery(
   return { messages: [...head, merged] };
 }
 
+function resolveCap(requested: number | undefined): number {
+  if (requested === undefined || !Number.isFinite(requested)) {
+    return DEFAULT_MAX_TELEGRAM_MESSAGES;
+  }
+
+  return Math.max(1, Math.floor(requested));
+}
+
 /**
- * Read the anti-flood ceiling from the environment, falling back to
+ * Read the bubble ceiling from the environment, falling back to
  * {@link DEFAULT_MAX_TELEGRAM_MESSAGES}. Non-numeric or sub-1 values fall back
- * to the default so a bad env var can never silence or unbound Param.
+ * to the default so a bad env var can't silence Param; a deliberately high
+ * value raises the ceiling by design.
  */
 export function telegramMaxMessages(): number {
   const raw = process.env.PARAM_TELEGRAM_MAX_MESSAGES?.trim();
