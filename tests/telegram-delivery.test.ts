@@ -55,6 +55,13 @@ describe("planTelegramDelivery", () => {
     expect(planTelegramDelivery(`a\n\n${STAY_QUIET_TOKEN}\n\nb`).messages).toEqual(["a", "b"]);
   });
 
+  test("does not leak a sentinel reconstituted from overlapping tokens", () => {
+    expect(planTelegramDelivery("[[param:[[param:stay_quiet]]stay_quiet]]").messages).toEqual([]);
+    expect(planTelegramDelivery(`yo [[param:${STAY_QUIET_TOKEN}stay_quiet]]`).messages).toEqual([
+      "yo",
+    ]);
+  });
+
   test("caps the burst and merges overflow into the last bubble", () => {
     const plan = planTelegramDelivery("a\n\nb\n\nc\n\nd", { maxMessages: 2 });
     expect(plan.messages).toEqual(["a", "b\n\nc\n\nd"]);
@@ -76,10 +83,15 @@ describe("planTelegramDelivery", () => {
   });
 
   test("falls back to the default cap for a non-finite cap", () => {
-    expect(planTelegramDelivery("a\n\nb", { maxMessages: Number.NaN }).messages).toEqual(["a", "b"]);
+    // 7 bubbles so the result differs from both broken behaviors (NaN would
+    // merge into 1, Infinity would keep all 7); only the default cap gives 6.
+    const sevenBubbles = "a\n\nb\n\nc\n\nd\n\ne\n\nf\n\ng";
+    expect(planTelegramDelivery(sevenBubbles, { maxMessages: Number.NaN }).messages).toHaveLength(
+      DEFAULT_MAX_TELEGRAM_MESSAGES,
+    );
     expect(
-      planTelegramDelivery("a\n\nb", { maxMessages: Number.POSITIVE_INFINITY }).messages,
-    ).toEqual(["a", "b"]);
+      planTelegramDelivery(sevenBubbles, { maxMessages: Number.POSITIVE_INFINITY }).messages,
+    ).toHaveLength(DEFAULT_MAX_TELEGRAM_MESSAGES);
   });
 
   test("floors fractional caps", () => {

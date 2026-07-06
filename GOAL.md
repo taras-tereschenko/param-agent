@@ -319,7 +319,7 @@ content intentionally, and keep chat delivery decoupled from raw model output.
 
 Current implementation note: `agent/lib/telegram-delivery.ts` turns the final
 model text into the posts to send (stay-quiet suppression, blank-line bubbles,
-anti-flood cap), and `agent/channels/telegram.ts` posts them. Treat the
+burst cap), and `agent/channels/telegram.ts` posts them. Treat the
 blank-line bubble protocol as a temporary bridge until explicit delivery
 tools/actions are implemented.
 

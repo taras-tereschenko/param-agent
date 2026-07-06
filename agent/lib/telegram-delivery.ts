@@ -14,7 +14,8 @@ export interface PlanTelegramDeliveryOptions {
   /**
    * Ceiling on the number of separate Telegram bubbles for one completed reply.
    * Overflow is merged into the last bubble instead of dropped so no content is
-   * lost. Non-finite or sub-1 values fall back to the default.
+   * lost. Non-finite or omitted values fall back to the default; values below 1
+   * are treated as 1.
    */
   readonly maxMessages?: number;
 }
@@ -41,8 +42,13 @@ export function planTelegramDelivery(
   const normalized = text.replace(/\r\n?/gu, "\n");
 
   // Remove the stay-quiet sentinel wherever it appears, not only when a bubble
-  // is exactly the token, so it can never leak into a real message.
-  const withoutQuietToken = normalized.split(STAY_QUIET_TOKEN).join("");
+  // is exactly the token, so it can never leak into a real message. Loop so a
+  // sentinel reconstituted by removing an overlapping one is also stripped;
+  // each pass shortens the string, so this terminates.
+  let withoutQuietToken = normalized;
+  while (withoutQuietToken.includes(STAY_QUIET_TOKEN)) {
+    withoutQuietToken = withoutQuietToken.split(STAY_QUIET_TOKEN).join("");
+  }
 
   const bubbles = withoutQuietToken
     .split(/\n{2,}/u)
