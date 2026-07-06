@@ -19,6 +19,33 @@ Core behavior:
 Param replies when it feels natural for a friend in the chat to reply.
 ```
 
+## Mandate (Current Task)
+
+Build the whole thing. Work through the entire Build Order below and close every
+item in Current Known Gaps, end to end, in this run. Do not stop after one
+increment. This is an explicit request for the full roadmap, so the build-order
+architecture layers (Vercel Workflows, memory review, schedules, runtime
+adapters, richer Telegram UI / Mini Apps, and the rest) are the assignment, not
+speculative additions to avoid.
+
+Build in Build Order sequence so each layer sits on a green one, and keep the
+repo green at each step (`bun test`, `bun run typecheck`, `bun run build`,
+`bunx eve info --json`).
+
+Some items need live credentials or external services to finish and verify
+(Telegram bot token, `DATABASE_URL` / Neon, a Vercel account for Workflows,
+provider creds for Codex / OpenCode / Antigravity / browser / image). For each of
+those: write the code, interfaces, adapters, and tests as far as possible without
+the credential, gate the live path behind config, and state plainly what still
+needs infra to finish. Do not skip them and do not stall the run waiting on infra
+you do not have.
+
+Review cadence: run the multi-subagent review pass (/review, /code-review,
+/security-review) once at the very end, or at most once per completed Build Order
+step. Never re-run the full gauntlet after every atomic commit or small fix.
+Batch the fixes, then do one confirmation pass. Breadth of implementation comes
+first; keep review spend proportionate to the change.
+
 ## Working Rules For The Coding Agent
 
 - Read `AGENTS.md` and `PARAM.md` before product or architecture changes.
@@ -31,8 +58,9 @@ Param replies when it feels natural for a friend in the chat to reply.
 - Do not reintroduce the old VPS-first architecture docs unless explicitly
   asked.
 - Do not add Docker unless explicitly asked.
-- Do not spawn subagents for implementation or review unless the user explicitly
-  asks for them again. Use local review and normal checks instead.
+- Do not spawn subagents for routine implementation. Use subagents for the heavy
+  review pass (the user has asked for it), following the review cadence in
+  Mandate (Current Task): at the end or per Build Order step, never per commit.
 - Do not introduce extra direct model API clients unless approved. Use the Eve
   model/runtime already configured by the repo.
 - Secrets belong in `.env` or deployment env vars, not committed config.
@@ -743,8 +771,9 @@ Preferred order from here:
 8. Add richer Telegram UI and Mini Apps.
 9. Expand to more channels only after Telegram works well.
 
-This order can change for a concrete user request, but do not add large
-architecture layers speculatively.
+Work through all of these to completion in this run (see Mandate). The order can
+change for a concrete user request. The only architecture to avoid is layers not
+described in this document; everything listed here is in scope.
 
 ## Definition Of Done
 
