@@ -249,11 +249,18 @@ Implementation detail:
 
 - `agent/lib/base-instructions.ts` defines `STAY_QUIET_TOKEN`.
 - If Param should stay quiet, the actor outputs exactly that token.
-- `agent/channels/telegram.ts` suppresses that token.
-- Target design is explicit delivery actions: Param can call a Telegram
+- `agent/lib/telegram-delivery.ts` owns the delivery decisions: it suppresses
+  `STAY_QUIET_TOKEN` (even when the model leaves it inline), splits blank-line
+  bubbles into separate posts, trims/drops empties, and caps the burst
+  (`PARAM_TELEGRAM_MAX_MESSAGES`, default 6) by merging overflow into the last
+  bubble. `agent/channels/telegram.ts` stays thin and just posts the plan.
+- Target design is explicit delivery actions: Param calls a Telegram
   delivery/send-message tool multiple times in one thinking session.
-- The current blank-line splitter is only a temporary compatibility shortcut,
-  not the final multi-message architecture.
+- The blank-line bubble protocol is still a bridge to that. A real
+  `send_message` tool is blocked today because Eve's tool `ctx` does not expose
+  channel delivery, and a tool that posts is a non-idempotent side effect Eve
+  re-runs on mid-step interruption (double-post hazard). It needs Eve support
+  for safe tool-driven channel delivery first.
 
 ## Product Behavior
 
@@ -310,9 +317,11 @@ multiple `send_message` tool calls, instead of relying on text formatting. This
 lets Param send several messages during one thinking session, choose timing and
 content intentionally, and keep chat delivery decoupled from raw model output.
 
-Current implementation note: `agent/channels/telegram.ts` still splits blank
-lines in final model text into separate Telegram posts. Treat that as a
-temporary bridge until explicit delivery tools/actions are implemented.
+Current implementation note: `agent/lib/telegram-delivery.ts` turns the final
+model text into the posts to send (stay-quiet suppression, blank-line bubbles,
+anti-flood cap), and `agent/channels/telegram.ts` posts them. Treat the
+blank-line bubble protocol as a temporary bridge until explicit delivery
+tools/actions are implemented.
 
 ## Sessions
 
@@ -466,6 +475,7 @@ PARAM_TRUSTED_TELEGRAM_USER_IDS_BY_CHAT
 PARAM_TRUSTED_TELEGRAM_MENTIONS_BY_CHAT
 PARAM_ALLOW_UNRESTRICTED_TELEGRAM
 PARAM_TELEGRAM_AMBIENT_GROUP_MESSAGES
+PARAM_TELEGRAM_MAX_MESSAGES
 ```
 
 Allowed users/groups decide who can talk to Param. Trusted users decide who can

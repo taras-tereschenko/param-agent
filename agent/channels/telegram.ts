@@ -9,11 +9,11 @@ import {
   formatDmFallbackNotice,
   sendDmActionReviewNotifications,
 } from "../lib/action-review-routing.js";
-import { STAY_QUIET_TOKEN } from "../lib/base-instructions.js";
 import {
   recordActionReviewRequested,
   recordActionReviewResult,
 } from "../lib/db/action-review.js";
+import { planTelegramDelivery, telegramMaxMessages } from "../lib/telegram-delivery.js";
 import { telegramPolicyDecision } from "../lib/telegram-policy.js";
 import { verifyParamTelegramWebhook } from "../lib/telegram-webhook.js";
 
@@ -39,18 +39,9 @@ export default telegramChannel({
     async "message.completed"(data, channel) {
       if (data.finishReason === "tool-calls" || !data.message) return;
 
-      const text = data.message.trim();
-      if (!text || text === STAY_QUIET_TOKEN) return;
-
-      const messages = text
-        .split(/\n{2,}/u)
-        .map(part => part.trim())
-        .filter(Boolean);
-
-      for (const message of messages) {
-        if (message !== STAY_QUIET_TOKEN) {
-          await channel.telegram.post(message);
-        }
+      const plan = planTelegramDelivery(data.message, { maxMessages: telegramMaxMessages() });
+      for (const message of plan.messages) {
+        await channel.telegram.post(message);
       }
     },
     async "action.result"(data, channel, ctx) {
