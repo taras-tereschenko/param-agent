@@ -88,6 +88,12 @@ describe("read tool approval policies", () => {
       runApproval(grepApproval(), { limit: 500, path: "/workspace/agent", pattern: "Param" }),
     ).toBe("user-approval");
   });
+
+  test("fails closed when a required field is missing", () => {
+    expect(runApproval(readFileApproval(), {})).toBe("user-approval");
+    expect(runApproval(globApproval(), {})).toBe("user-approval");
+    expect(runApproval(grepApproval(), {})).toBe("user-approval");
+  });
 });
 
 // The approval policies read specific input fields by name. If a future eve
