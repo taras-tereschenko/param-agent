@@ -15,7 +15,23 @@ import {
 } from "../lib/db/action-review.js";
 import { planTelegramDelivery, telegramMaxMessages } from "../lib/telegram-delivery.js";
 import { telegramPolicyDecision } from "../lib/telegram-policy.js";
+import {
+  buildSetMessageReactionRequest,
+  parseTelegramReactions,
+} from "../lib/telegram-reactions.js";
 import { verifyParamTelegramWebhook } from "../lib/telegram-webhook.js";
+
+function triggeringMessageId(ctx: unknown): string | undefined {
+  const auth = (ctx as { session?: { auth?: { current?: unknown; initiator?: unknown } } })?.session
+    ?.auth;
+  for (const principal of [auth?.current, auth?.initiator]) {
+    const value = (principal as { attributes?: Record<string, unknown> } | null | undefined)
+      ?.attributes?.message_id;
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+
+  return undefined;
+}
 
 export default telegramChannel({
   botUsername: process.env.TELEGRAM_BOT_USERNAME ?? "param_bot",
@@ -36,10 +52,25 @@ export default telegramChannel({
     return decision;
   },
   events: {
-    async "message.completed"(data, channel) {
+    async "message.completed"(data, channel, ctx) {
       if (data.finishReason === "tool-calls" || !data.message) return;
 
-      const plan = planTelegramDelivery(data.message, { maxMessages: telegramMaxMessages() });
+      const { reactions, text } = parseTelegramReactions(data.message);
+
+      const reactionRequest = buildSetMessageReactionRequest({
+        chatId: channel.state.chatId,
+        messageId: triggeringMessageId(ctx),
+        reactions,
+      });
+      if (reactionRequest) {
+        try {
+          await channel.telegram.request("setMessageReaction", reactionRequest);
+        } catch (error) {
+          console.error("failed to set telegram reaction", error);
+        }
+      }
+
+      const plan = planTelegramDelivery(text, { maxMessages: telegramMaxMessages() });
       for (const message of plan.messages) {
         await channel.telegram.post(message);
       }
