@@ -20,6 +20,14 @@ export interface PlanTelegramDeliveryOptions {
   readonly maxMessages?: number;
 }
 
+function resolveCap(requested: number | undefined): number {
+  if (requested === undefined || !Number.isFinite(requested)) {
+    return DEFAULT_MAX_TELEGRAM_MESSAGES;
+  }
+
+  return Math.max(1, Math.floor(requested));
+}
+
 /**
  * Turn one actor text block into the concrete Telegram messages to post.
  *
@@ -64,14 +72,6 @@ export function planTelegramDelivery(
   const merged = bubbles.slice(cap - 1).join("\n\n");
 
   return { messages: [...head, merged] };
-}
-
-function resolveCap(requested: number | undefined): number {
-  if (requested === undefined || !Number.isFinite(requested)) {
-    return DEFAULT_MAX_TELEGRAM_MESSAGES;
-  }
-
-  return Math.max(1, Math.floor(requested));
 }
 
 /**
