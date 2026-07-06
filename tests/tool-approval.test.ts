@@ -78,6 +78,16 @@ describe("read tool approval policies", () => {
       runApproval(grepApproval(), { glob: "**/*", path: "/workspace/agent", pattern: "Param" }),
     ).toBe("user-approval");
   });
+
+  test("requires review for sensitive glob patterns", () => {
+    expect(runApproval(globApproval(), { pattern: "credentials/**/*.ts" })).toBe("user-approval");
+  });
+
+  test("requires review for oversized grep limits", () => {
+    expect(
+      runApproval(grepApproval(), { limit: 500, path: "/workspace/agent", pattern: "Param" }),
+    ).toBe("user-approval");
+  });
 });
 
 // The approval policies read specific input fields by name. If a future eve
