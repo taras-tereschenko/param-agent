@@ -42,6 +42,14 @@ on an earlier build-order layer — and have the lead integrate each slice and
 keep the app green after every merge. Do not fan out work that heavily shares
 files; the coordination cost outweighs the parallelism.
 
+Run every agent on the same model at max reasoning effort: Opus, max effort, for
+the lead and for every subagent (implementation and review). Subagents inherit
+the lead's model, so keep the lead on Opus at max effort and pass the Opus model
+explicitly when spawning so none fall back to a smaller default. (Effort is not a
+per-spawn setting; it follows the lead, so the lead must run at max effort. If
+managed settings pin a smaller model on session start, switch the lead back to
+Opus/max before starting the build.)
+
 Some items need live credentials or external services to finish and verify
 (Telegram bot token, `DATABASE_URL` / Neon, a Vercel account for Workflows,
 provider creds for Codex / OpenCode / Antigravity / browser / image). For each of
