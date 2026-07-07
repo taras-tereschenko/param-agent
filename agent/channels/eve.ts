@@ -1,15 +1,17 @@
 import { eveChannel } from "eve/channels/eve";
 import { localDev, placeholderAuth, vercelOidc } from "eve/channels/auth";
 
+// SECURITY: localDev() grants ANY loopback request (isLoopbackRequest), not just
+// `eve dev`. Self-hosted behind a public tunnel (Tailscale Funnel proxies
+// internet traffic to localhost), that would expose the eve session API to the
+// internet unauthenticated. So it is opt-in via PARAM_LOCAL_DEV for local
+// development only — never set it in production. By default the session API is
+// locked (vercelOidc has no tokens off Vercel; placeholderAuth denies), which is
+// fine because Param is Telegram-first and has no web client yet.
 export default eveChannel({
   auth: [
-    // Open on localhost for `eve dev` and the REPL; ignored in production.
-    localDev(),
-    // Lets the eve TUI and your Vercel deployments reach the deployed agent.
+    ...(process.env.PARAM_LOCAL_DEV === "true" ? [localDev()] : []),
     vercelOidc(),
-    // This placeholder will not allow browser requests in production.
-    // Replace it with your app's auth provider, like Auth.js or Clerk,
-    // or use none() for a public demo.
     placeholderAuth(),
   ],
 });

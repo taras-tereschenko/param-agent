@@ -113,6 +113,27 @@ bun run telegram:webhook:get        # verify url + pending count
 - Try a reaction or a `[[param:link:…]]` button.
 - Set `PARAM_PROACTIVE_TELEGRAM_CHAT_IDS` to enable proactive wakes.
 
+## Security
+
+- **Codex is read-only.** `agent/agent.ts` runs `codexExec` with
+  `sandboxMode: "read-only"` and `approvalMode: "never"`, so a crafted or injected
+  chat prompt cannot make Codex run commands or write files on the VPS. Do not
+  loosen this.
+- **eve session API is locked by default.** `agent/channels/eve.ts` only trusts
+  loopback when `PARAM_LOCAL_DEV=true` (local dev). Leave it unset in production —
+  otherwise, because Funnel proxies the internet to localhost, the session API
+  (`/eve/v1/session`, which can drive Param) would be publicly reachable
+  unauthenticated. The Telegram webhook is separately gated by
+  `TELEGRAM_WEBHOOK_SECRET_TOKEN` (fail-closed).
+- **Expose only the webhook.** Prefer scoping Tailscale Funnel to the
+  `/eve/v1/telegram` path; keep SSH and Postgres on the tailnet (never public).
+- **Access control.** Set `PARAM_ALLOWED_TELEGRAM_USER_IDS` /
+  `PARAM_TRUSTED_TELEGRAM_USER_IDS`; never `PARAM_ALLOW_UNRESTRICTED_TELEGRAM=true`
+  in production.
+- **Secret hygiene.** Protect `~/.codex/auth.json` (your subscription token,
+  `chmod 600`, service-user only) and `.env` (not world-readable). If the VPS is
+  compromised, that token is compromised.
+
 ## Not implemented yet
 
 Memory-review, pgvector search, adapter runners, and Mini Apps remain unbuilt
