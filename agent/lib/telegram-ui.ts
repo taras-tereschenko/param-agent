@@ -33,7 +33,7 @@ export type InlineKeyboardMarkup = {
 function isHttpUrl(value: string): boolean {
   // Reject embedded whitespace/control chars: new URL() strips them, so a value
   // like "h\nttps://x" would validate but be sent raw and rejected by Telegram.
-  if (/\s/u.test(value)) return false;
+  if (/[\s\p{Cc}]/u.test(value)) return false;
 
   try {
     const url = new URL(value);

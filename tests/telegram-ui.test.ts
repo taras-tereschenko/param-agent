@@ -37,8 +37,11 @@ describe("parseTelegramLinkButtons", () => {
     expect(parseTelegramLinkButtons("[[param:link:Bad|not a url]]").buttons).toEqual([]);
   });
 
-  test("drops a url with embedded whitespace", () => {
-    expect(parseTelegramLinkButtons("[[param:link:Bad|https://x.com/a\nb]]").buttons).toEqual([]);
+  test("drops a url with embedded whitespace or control chars", () => {
+    const newlineUrl = `[[param:link:Bad|https://x.com/a${String.fromCharCode(10)}b]]`;
+    expect(parseTelegramLinkButtons(newlineUrl).buttons).toEqual([]);
+    const controlUrl = `[[param:link:Bad|https://x.com/a${String.fromCharCode(1)}b]]`;
+    expect(parseTelegramLinkButtons(controlUrl).buttons).toEqual([]);
   });
 
   test("strips a dropped directive from the text so it never leaks", () => {
