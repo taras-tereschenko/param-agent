@@ -40,10 +40,12 @@ Required:
 
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET_TOKEN`
 - `AI_GATEWAY_API_KEY` (and `PARAM_EVE_MODEL` if not using the default)
-- `PARAM_PUBLIC_BASE_URL` — your deployment origin, e.g. `https://param.example.app`
 - `TELEGRAM_BOT_USERNAME`, `TELEGRAM_BOT_ID`
 - `PARAM_ALLOWED_TELEGRAM_USER_IDS`, `PARAM_TRUSTED_TELEGRAM_USER_IDS`
   (keep allowed ≠ trusted)
+
+(`PARAM_PUBLIC_BASE_URL` is not read by the deployed app — it's only needed
+locally for the webhook-registration step below.)
 
 Recommended:
 

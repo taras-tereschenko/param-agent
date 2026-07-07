@@ -4,6 +4,7 @@ import {
   splitTelegramMessageText,
   telegramChannel,
 } from "eve/channels/telegram";
+import type { SessionContext } from "eve/context";
 import { formatActionReviewMessage, isApprovalRequest } from "../lib/action-review.js";
 import {
   actionReviewRouteForTelegram,
@@ -23,13 +24,10 @@ import {
 import { buildInlineKeyboardMarkup, parseTelegramLinkButtons } from "../lib/telegram-ui.js";
 import { verifyParamTelegramWebhook } from "../lib/telegram-webhook.js";
 
-function triggeringMessageId(ctx: unknown): string | undefined {
+function triggeringMessageId(ctx: SessionContext): string | undefined {
   // Only the current turn's caller — reacting to the initiator could target a
   // stale origin message on a resumed or proactive session.
-  const current = (ctx as { session?: { auth?: { current?: unknown } } })?.session?.auth?.current;
-  const value = (current as { attributes?: Record<string, unknown> } | null | undefined)
-    ?.attributes?.message_id;
-
+  const value = ctx.session.auth.current?.attributes?.message_id;
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
