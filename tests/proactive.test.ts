@@ -21,6 +21,11 @@ describe("proactiveTelegramChatIds", () => {
     process.env.PARAM_PROACTIVE_TELEGRAM_CHAT_IDS = "111, -100 ,222";
     expect(proactiveTelegramChatIds()).toEqual(["111", "-100", "222"]);
   });
+
+  test("dedupes repeated chat ids so a wake fires once per chat", () => {
+    process.env.PARAM_PROACTIVE_TELEGRAM_CHAT_IDS = "111,111,222";
+    expect(proactiveTelegramChatIds()).toEqual(["111", "222"]);
+  });
 });
 
 describe("buildProactiveWakePrompt", () => {

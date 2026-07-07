@@ -18,7 +18,14 @@ export const TELEGRAM_ALLOWED_REACTIONS: ReadonlySet<string> = new Set([
  */
 export const MAX_TELEGRAM_REACTIONS = 1;
 
-const REACTION_DIRECTIVE = /\[\[param:react:(?<emoji>[^\]]*)\]\]/gu;
+const REACTION_DIRECTIVE = /\[\[param:react:(?<emoji>[^\]]*)\]\]/giu;
+
+// Telegram's reaction values omit the U+FE0F variation selector, but models
+// emit the fully-qualified form (e.g. "❤️"). Strip it so input matches the
+// allowed set and Telegram gets the canonical form it accepts.
+function normalizeReactionEmoji(raw: string): string {
+  return raw.trim().replace(new RegExp("\\uFE0F", "gu"), "");
+}
 
 export interface TelegramReactionPlan {
   /** Valid emoji to react with, in order, deduped and capped. */
@@ -43,7 +50,7 @@ export function parseTelegramReactions(text: string | null | undefined): Telegra
   const reactions: string[] = [];
 
   for (const match of text.matchAll(REACTION_DIRECTIVE)) {
-    const emoji = match.groups?.emoji?.trim();
+    const emoji = normalizeReactionEmoji(match.groups?.emoji ?? "");
     if (!emoji || seen.has(emoji) || !TELEGRAM_ALLOWED_REACTIONS.has(emoji)) continue;
 
     seen.add(emoji);
@@ -55,6 +62,8 @@ export function parseTelegramReactions(text: string | null | undefined): Telegra
   return { reactions, text: stripped };
 }
 
+// Plain, non-readonly object type so it satisfies Eve's JsonObject request body
+// type. Do not add readonly modifiers; that breaks the assignability.
 export type SetMessageReactionRequest = {
   chat_id: string;
   message_id: number;

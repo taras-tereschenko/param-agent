@@ -37,6 +37,12 @@ describe("parseTelegramReactions", () => {
     expect(plan.text).toBe("");
   });
 
+  test("normalizes the variation selector so a fully-qualified emoji matches", () => {
+    // "❤️" is the heart models emit; Telegram's reaction value is the
+    // bare "❤", which is what the allowed set holds.
+    expect(parseTelegramReactions("[[param:react:❤️]]").reactions).toEqual(["❤"]);
+  });
+
   test("dedupes repeated reactions", () => {
     const plan = parseTelegramReactions("[[param:react:👍]] [[param:react:👍]]");
     expect(plan.reactions).toEqual(["👍"]);

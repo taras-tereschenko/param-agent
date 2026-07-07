@@ -1,11 +1,9 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   defaultRuntimeRegistry,
   RuntimeAdapterRegistry,
   type RuntimeAdapter,
 } from "../agent/lib/adapters/runtime-adapter.ts";
-
-const OLD_ENV = { ...process.env };
 
 function fakeAdapter(overrides: Partial<RuntimeAdapter> & { id: string }): RuntimeAdapter {
   return {
@@ -47,14 +45,6 @@ describe("RuntimeAdapterRegistry", () => {
 });
 
 describe("defaultRuntimeRegistry", () => {
-  beforeEach(() => {
-    process.env = { ...OLD_ENV };
-  });
-
-  afterEach(() => {
-    process.env = { ...OLD_ENV };
-  });
-
   test("registers every known provider", () => {
     const ids = defaultRuntimeRegistry({}).all().map(a => a.id);
     expect(ids).toEqual(["codex", "opencode", "antigravity", "browser", "image"]);

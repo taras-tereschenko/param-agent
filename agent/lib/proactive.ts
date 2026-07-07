@@ -6,7 +6,7 @@ import { csvList } from "./telegram-auth.js";
  * never spam a chat that has not asked for them.
  */
 export function proactiveTelegramChatIds(): string[] {
-  return csvList("PARAM_PROACTIVE_TELEGRAM_CHAT_IDS");
+  return [...new Set(csvList("PARAM_PROACTIVE_TELEGRAM_CHAT_IDS"))];
 }
 
 /**

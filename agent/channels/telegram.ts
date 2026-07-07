@@ -22,15 +22,13 @@ import {
 import { verifyParamTelegramWebhook } from "../lib/telegram-webhook.js";
 
 function triggeringMessageId(ctx: unknown): string | undefined {
-  const auth = (ctx as { session?: { auth?: { current?: unknown; initiator?: unknown } } })?.session
-    ?.auth;
-  for (const principal of [auth?.current, auth?.initiator]) {
-    const value = (principal as { attributes?: Record<string, unknown> } | null | undefined)
-      ?.attributes?.message_id;
-    if (typeof value === "string" && value.length > 0) return value;
-  }
+  // Only the current turn's caller — reacting to the initiator could target a
+  // stale origin message on a resumed or proactive session.
+  const current = (ctx as { session?: { auth?: { current?: unknown } } })?.session?.auth?.current;
+  const value = (current as { attributes?: Record<string, unknown> } | null | undefined)
+    ?.attributes?.message_id;
 
-  return undefined;
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 export default telegramChannel({
