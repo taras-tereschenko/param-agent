@@ -1,6 +1,7 @@
 import {
   registerTelegramFreeformPrompt,
   renderTelegramInputRequest,
+  splitTelegramMessageText,
   telegramChannel,
 } from "eve/channels/telegram";
 import { formatActionReviewMessage, isApprovalRequest } from "../lib/action-review.js";
@@ -73,10 +74,29 @@ export default telegramChannel({
       const plan = planTelegramDelivery(text, { maxMessages: telegramMaxMessages() });
       const replyMarkup = buildInlineKeyboardMarkup(buttons);
       for (const [index, message] of plan.messages.entries()) {
-        const isLast = index === plan.messages.length - 1;
-        await channel.telegram.post(
-          isLast && replyMarkup ? { reply_markup: replyMarkup, text: message } : message,
-        );
+        const isLastBubble = index === plan.messages.length - 1;
+        if (!(isLastBubble && replyMarkup)) {
+          await channel.telegram.post(message);
+          continue;
+        }
+
+        // Attach the keyboard to the true last chunk: post() puts reply_markup on
+        // the first chunk when it splits an over-4096 message, which would strand
+        // the buttons mid-message. On rejection, resend without buttons so the
+        // reply text is never lost.
+        const chunks = splitTelegramMessageText(message);
+        for (const [chunkIndex, chunk] of chunks.entries()) {
+          if (chunkIndex < chunks.length - 1) {
+            await channel.telegram.post(chunk);
+            continue;
+          }
+          try {
+            await channel.telegram.post({ reply_markup: replyMarkup, text: chunk });
+          } catch (error) {
+            console.error("failed to post telegram buttons; sending without", error);
+            await channel.telegram.post(chunk);
+          }
+        }
       }
     },
     async "action.result"(data, channel, ctx) {

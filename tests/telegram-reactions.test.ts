@@ -44,6 +44,8 @@ describe("parseTelegramReactions", () => {
   });
 
   test("dedupes repeated reactions", () => {
+    // With MAX_TELEGRAM_REACTIONS === 1 the cap also enforces this; the seen-set
+    // dedupe becomes independently observable only if the cap rises above 1.
     const plan = parseTelegramReactions("[[param:react:👍]] [[param:react:👍]]");
     expect(plan.reactions).toEqual(["👍"]);
   });

@@ -37,6 +37,16 @@ describe("parseTelegramLinkButtons", () => {
     expect(parseTelegramLinkButtons("[[param:link:Bad|not a url]]").buttons).toEqual([]);
   });
 
+  test("drops a url with embedded whitespace", () => {
+    expect(parseTelegramLinkButtons("[[param:link:Bad|https://x.com/a\nb]]").buttons).toEqual([]);
+  });
+
+  test("strips a dropped directive from the text so it never leaks", () => {
+    const plan = parseTelegramLinkButtons("see [[param:link:Bad|javascript:alert(1)]] here");
+    expect(plan.buttons).toEqual([]);
+    expect(plan.text).toBe("see  here");
+  });
+
   test("drops a button with an empty label or missing separator", () => {
     expect(parseTelegramLinkButtons("[[param:link:|https://a.com]]").buttons).toEqual([]);
     expect(parseTelegramLinkButtons("[[param:link:https://a.com]]").buttons).toEqual([]);

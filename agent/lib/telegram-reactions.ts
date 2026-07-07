@@ -20,11 +20,13 @@ export const MAX_TELEGRAM_REACTIONS = 1;
 
 const REACTION_DIRECTIVE = /\[\[param:react:(?<emoji>[^\]]*)\]\]/giu;
 
-// Telegram's reaction values omit the U+FE0F variation selector, but models
-// emit the fully-qualified form (e.g. "❤️"). Strip it so input matches the
-// allowed set and Telegram gets the canonical form it accepts.
+// U+FE0F variation selector, built once. Telegram's reaction values omit it,
+// but models emit the fully-qualified form (e.g. "❤️"); strip it so input
+// matches the allowed set and Telegram gets the canonical form it accepts.
+const VARIATION_SELECTOR = new RegExp("\\uFE0F", "gu");
+
 function normalizeReactionEmoji(raw: string): string {
-  return raw.trim().replace(new RegExp("\\uFE0F", "gu"), "");
+  return raw.trim().replace(VARIATION_SELECTOR, "");
 }
 
 export interface TelegramReactionPlan {

@@ -524,6 +524,7 @@ PARAM_TRUSTED_TELEGRAM_MENTIONS_BY_CHAT
 PARAM_ALLOW_UNRESTRICTED_TELEGRAM
 PARAM_TELEGRAM_AMBIENT_GROUP_MESSAGES
 PARAM_TELEGRAM_MAX_MESSAGES
+PARAM_PROACTIVE_TELEGRAM_CHAT_IDS
 ```
 
 Allowed users/groups decide who can talk to Param. Trusted users decide who can
@@ -764,13 +765,12 @@ Keep allowed users/groups separate from trusted reviewers.
 These are not bugs unless the current task claims they are done:
 
 - no full message batching yet
-- no Telegram reactions yet
 - no automatic memory-review actor yet
 - no vector memory search yet
 - no Vercel Workflow implementation yet
-- no schedule/heartbeat implementation yet
-- no Codex/OpenCode/Antigravity adapters yet
-- no browser/image helper runtime yet
+- only a daily opt-in proactive schedule; no heartbeat or other cadences yet
+- runtime-adapter interface/registry landed, but no Codex/OpenCode/Antigravity runners yet
+- no browser/image helper runtime yet (adapter descriptors exist, gated on creds)
 - no Telegram Mini Apps yet
 - no full cross-chat DM approval relay yet
 - no automatic Telegram membership discovery for trusted reviewers yet
