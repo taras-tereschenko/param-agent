@@ -92,7 +92,10 @@ Implementation comes first; the full review flow comes at the very end.
 - TypeScript
 - Bun for scripts and package management
 - Telegram webhooks through Eve
-- Vercel/serverless deployment direction
+- Inference via your Codex (ChatGPT Plus/Pro) subscription through the Codex CLI
+  (`ai-sdk-provider-codex-cli`), not the paid AI Gateway
+- Self-hosted deployment (`eve start`): the Codex CLI is a local binary, so the
+  inference path cannot run on Vercel serverless (see DEPLOY.md)
 - Vercel Workflows for durable background orchestration
 - Neon/serverless Postgres through Drizzle
 - Zod for tool/input validation
