@@ -1,53 +1,47 @@
 # Deploying Param
 
-Concrete steps to run Param (an Eve app) and wire up Telegram. High-level
-rationale is in `GOAL.md`; the full env-var list with comments is in
-`.env.example`.
+Param runs as a single self-hosted process on a VPS (e.g. Hetzner). There is no
+Vercel/serverless part: inference goes through your Codex (ChatGPT Plus/Pro)
+subscription via the local Codex CLI (`ai-sdk-provider-codex-cli`), which needs a
+persistent host. The Telegram webhook is exposed publicly with **Tailscale
+Funnel** — no domain or reverse proxy required.
 
-**Where Param runs:** inference goes through your Codex (ChatGPT Plus/Pro)
-subscription via the Codex CLI (`ai-sdk-provider-codex-cli`). That CLI is a local
-binary, so Param must run on a host where it's installed and logged in — a VM,
-server, or container with a persistent process (`eve start`), **not** a Vercel
-serverless function. (Serverless can't spawn the CLI. If you ever want the
-serverless deploy back, switch `agent/agent.ts` to a gateway/API model.)
+High-level rationale is in `GOAL.md`; the full env-var list is in `.env.example`.
 
-## 1. Prerequisites (you provide)
+## 1. Prerequisites
 
-- A Telegram bot from [@BotFather](https://t.me/BotFather) → `TELEGRAM_BOT_TOKEN`;
-  note its username and numeric id.
-- A host you control with a **public HTTPS URL** (domain, reverse proxy, or
-  tunnel) for the Telegram webhook.
-- The **Codex CLI**, installed and logged in on that host:
-  `npm i -g @openai/codex && codex login` (stores tokens in `~/.codex/auth.json`).
-- A strong random string for `TELEGRAM_WEBHOOK_SECRET_TOKEN` (you choose it).
-- For persistent memory and Action Review audit: a managed Postgres (e.g. Neon)
-  → `DATABASE_URL`. Param runs without it, but memory won't persist and audit is
-  disabled.
+- A VPS you control (Hetzner is fine) with Bun installed.
+- The **Codex CLI**, installed and logged in on the VPS:
+  `npm i -g @openai/codex && codex login`. It's headless, so use the device-code
+  flow, or copy `~/.codex/auth.json` from a machine where you've already logged
+  in. Tokens must live in the `$HOME` of the user that runs Param.
+- A **Telegram bot** from [@BotFather](https://t.me/BotFather) → `TELEGRAM_BOT_TOKEN`
+  (note its username and numeric id) and a strong random `TELEGRAM_WEBHOOK_SECRET_TOKEN`.
+- A **Tailscale** account (free personal plan) with Funnel enabled for the node.
+- Optional: Postgres for memory + Action Review audit — install it locally on the
+  VPS or use Neon's free tier.
 - Your Telegram user id(s) for the allow/trust lists.
 
-## 2. Set up the host
+## 2. Get the code onto the VPS
 
 ```bash
 git clone <repo> && cd param-agent
 bun install
-npm i -g @openai/codex && codex login   # if not already done
-cp .env.example .env                     # then fill it in (next section)
+cp .env.example .env      # then fill it in (step 3)
 ```
 
-## 3. Environment variables
+## 3. Environment (`.env`)
 
-Fill `.env` (or export in the process environment). Required:
+Required: `PARAM_CODEX_MODEL` (e.g. `gpt-5.5`), `PARAM_CODEX_CONTEXT_WINDOW`,
+`TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET_TOKEN`, `TELEGRAM_BOT_USERNAME`,
+`TELEGRAM_BOT_ID`, `PARAM_ALLOWED_TELEGRAM_USER_IDS`,
+`PARAM_TRUSTED_TELEGRAM_USER_IDS` (keep allowed ≠ trusted), and
+`PARAM_PUBLIC_BASE_URL` = your Funnel URL from step 5 (e.g.
+`https://vps.tailnet-name.ts.net`).
 
-- `PARAM_CODEX_MODEL` (e.g. `gpt-5.5`) and `PARAM_CODEX_CONTEXT_WINDOW` (feeds compaction)
-- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET_TOKEN`
-- `TELEGRAM_BOT_USERNAME`, `TELEGRAM_BOT_ID`
-- `PARAM_PUBLIC_BASE_URL` — the host's public origin (used to register the webhook)
-- `PARAM_ALLOWED_TELEGRAM_USER_IDS`, `PARAM_TRUSTED_TELEGRAM_USER_IDS`
-  (keep allowed ≠ trusted)
-
-Recommended: `DATABASE_URL`, plus `PARAM_INTERNAL_API_SECRET` and
-`PARAM_INTERNAL_API_ORIGIN` (the internal memory API). Optional:
-`PARAM_PROACTIVE_TELEGRAM_CHAT_IDS`, `PARAM_TELEGRAM_MAX_MESSAGES`.
+Recommended: `DATABASE_URL` (+ `PARAM_INTERNAL_API_SECRET`,
+`PARAM_INTERNAL_API_ORIGIN`). Optional: `PARAM_PROACTIVE_TELEGRAM_CHAT_IDS`,
+`PARAM_TELEGRAM_MAX_MESSAGES`.
 
 Fail-closed: with no `TELEGRAM_WEBHOOK_SECRET_TOKEN`, the webhook rejects every
 update, so the bot stays silent.
@@ -56,40 +50,70 @@ update, so the bot stays silent.
 
 ```bash
 bun run db:migrate
-bun run db:smoke     # optional sanity check
+bun run db:smoke        # optional sanity check
 ```
 
-## 5. Build and run
+## 5. Expose the webhook with Tailscale Funnel
+
+Telegram must reach Param over public HTTPS. `eve start` serves on port `3000`
+(override with `PORT`); Funnel publishes it on a valid `*.ts.net` cert.
 
 ```bash
-bun run build        # eve build
-bun run start        # eve start — serves /eve/v1/telegram and runs the proactive cron in-process
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+# Enable Funnel for this node in the Tailscale admin console (ACL nodeAttrs),
+# then publish the local port:
+sudo tailscale funnel 3000
+sudo tailscale funnel status      # prints the public https://<node>.<tailnet>.ts.net URL
 ```
 
-Keep this process alive (systemd, pm2, a container, etc.) and expose its port
-behind your public HTTPS URL.
+Put that URL in `PARAM_PUBLIC_BASE_URL`.
 
-## 6. Register the Telegram webhook
+## 6. Run Param (systemd)
 
-With `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET_TOKEN`, and
-`PARAM_PUBLIC_BASE_URL` set:
+`/etc/systemd/system/param.service` (run as the user that did `codex login`, so
+`~/.codex/auth.json` is in scope):
+
+```ini
+[Unit]
+Description=Param
+After=network-online.target
+
+[Service]
+User=param
+WorkingDirectory=/home/param/param-agent
+EnvironmentFile=/home/param/param-agent/.env
+ExecStartPre=/home/param/.bun/bin/bun run build
+ExecStart=/home/param/.bun/bin/bun run start
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
 
 ```bash
-bun run telegram:webhook:set
-bun run telegram:webhook:get          # verify url + pending count
+sudo systemctl enable --now param
+journalctl -u param -f        # watch logs
 ```
 
-This registers `<PARAM_PUBLIC_BASE_URL>/eve/v1/telegram` with the secret token
-and `allowed_updates: [message, callback_query]`.
+`eve start` serves `/eve/v1/telegram` and runs the proactive cron in-process,
+using Eve's local (on-disk) Workflow world for durable background work — no
+Vercel needed.
 
-## 7. Verify
+## 7. Register the webhook and verify
+
+```bash
+bun run telegram:webhook:set        # registers <PARAM_PUBLIC_BASE_URL>/eve/v1/telegram
+bun run telegram:webhook:get        # verify url + pending count
+```
 
 - DM the bot from an allowed user → Param replies (the first turn also confirms
-  Codex auth is working; watch the process logs).
-- Exercise a reaction or a `[[param:link:…]]` button.
+  Codex auth; watch `journalctl -u param`).
+- Try a reaction or a `[[param:link:…]]` button.
 - Set `PARAM_PROACTIVE_TELEGRAM_CHAT_IDS` to enable proactive wakes.
 
 ## Not implemented yet
 
-Vercel Workflows, memory-review, pgvector search, adapter runners, and Mini Apps
-remain unbuilt (see `GOAL.md` → "Current Known Gaps").
+Memory-review, pgvector search, adapter runners, and Mini Apps remain unbuilt
+(see `GOAL.md` → "Current Known Gaps").

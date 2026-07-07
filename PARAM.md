@@ -206,7 +206,7 @@ exact bounded proposal being approved.
 
 ## Architecture
 
-Current direction: fresh Eve/serverless architecture.
+Current direction: an Eve app, self-hosted on a VPS.
 
 High-level shape:
 
@@ -305,7 +305,7 @@ Current repo starts with:
 - TypeScript
 - Bun
 - Telegram channel
-- Vercel/serverless direction
+- Self-hosted on a VPS (e.g. Hetzner); no serverless tier
 - Neon/serverless Postgres through Drizzle for durable profile and memory storage
 
 Expected later additions:
@@ -318,29 +318,29 @@ Expected later additions:
 
 ## Deployment
 
-Param is intended to deploy on Vercel first.
+Param self-hosts on a VPS (e.g. Hetzner) as a long-running `eve start` process.
+There is no serverless tier: inference uses your Codex subscription via the local
+Codex CLI, which needs a persistent host.
 
 Deployment shape:
 
 ```text
-GitHub repo
-  -> Vercel project
-  -> Eve build output
-  -> Telegram webhook
-  -> managed Postgres / memory storage
-  -> sandbox or runner for native jobs
+VPS (e.g. Hetzner)
+  -> Codex CLI logged in (subscription = inference)
+  -> eve start (serves the Telegram webhook + schedules)
+  -> Postgres (local or Neon) for profile + memory storage
+  -> Tailscale Funnel for the public HTTPS webhook URL
 ```
 
-Expected setup:
+Expected setup (see DEPLOY.md for details):
 
-- deploy the Eve app to Vercel
-- set Vercel environment variables
-- configure `TELEGRAM_BOT_TOKEN`
-- configure `TELEGRAM_WEBHOOK_SECRET_TOKEN`
-- register Telegram webhook to `/eve/v1/telegram`
-- connect managed Postgres for profile and memory storage
-- add sandbox/native runner credentials when native tools land
-- keep production secrets in Vercel env or a proper secret store
+- install and log in the Codex CLI on the host (`codex login`)
+- fill `.env`: Codex model, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET_TOKEN`,
+  allow/trust ids, `PARAM_PUBLIC_BASE_URL`
+- expose the port with Tailscale Funnel and register the webhook to
+  `/eve/v1/telegram`
+- connect Postgres for profile and memory storage
+- keep secrets in `.env` / the host environment, not committed config
 
 Local development:
 
@@ -349,11 +349,7 @@ bun install
 bun x eve dev
 ```
 
-Production should not rely on a long-running local process.
-
-If Vercel Sandbox is not enough for some native/browser/code task, Param can use
-a separate runner behind a runtime adapter without changing the main deployment
-shape.
+Production is a long-running `eve start` process (systemd or similar) on the VPS.
 
 ## Build Order
 

@@ -74,8 +74,8 @@ Implementation comes first; the full review flow comes at the very end.
   layers.
 - Use Bun and TypeScript.
 - Use official setup paths and CLIs when adding frameworks or tools.
-- Do not reintroduce the old VPS-first architecture docs unless explicitly
-  asked.
+- Param self-hosts on a VPS now (the deploy target; see DEPLOY.md), but keep the
+  Eve architecture: do not resurrect the old pre-Eve custom VPS architecture.
 - Do not add Docker unless explicitly asked.
 - Use subagents to parallelize implementation of independent, interface-bounded
   slices, and to run the end-of-run review pass, as described in Mandate
@@ -429,32 +429,33 @@ directly.
 
 ## Deployment Direction
 
-Deploy Param on Vercel first.
+Self-host Param on a VPS (e.g. Hetzner). There is no serverless/Vercel tier:
+inference runs through your Codex subscription via the local Codex CLI, which
+needs a persistent host, so Param is a long-running `eve start` process.
 
 Expected shape:
 
 ```text
-GitHub repo
-  -> Vercel project
-  -> Eve build output
-  -> Telegram webhook
-  -> Vercel Workflows for durable background jobs
-  -> managed Postgres / memory storage
-  -> sandbox or runner for native jobs
+VPS (e.g. Hetzner)
+  -> Codex CLI logged in (your ChatGPT/Codex subscription = inference)
+  -> eve start (long-running; serves the Telegram webhook + runs schedules)
+  -> Eve local Workflow world (on-disk durable background work)
+  -> Postgres (local or Neon) for memory + Action Review audit
+  -> Tailscale Funnel for the public HTTPS webhook URL
 ```
 
-Production should not rely on a long-running local process.
+See DEPLOY.md for the concrete steps. Native/browser/image jobs still run behind
+runtime adapters / sandboxes, reached from the same host.
 
-If Vercel Sandbox is not enough for a native/browser/code task, add a separate
-runner behind a runtime adapter without changing the main deployment shape.
+## Durable Background Work (Workflows)
 
-## Vercel Workflows
+Eve turns run on the Workflow SDK. Self-hosted with `eve start`, Eve uses its
+local on-disk Workflow world, so durable background orchestration works on the
+VPS without Vercel. (The same code would run on Vercel Workflow if ever deployed
+there.)
 
-Vercel Workflows are part of the target architecture.
-
-Use them for durable background orchestration: work that needs retries,
-observability, sleeps, pause/resume, external hooks, or survival across
-deployments and crashes.
+Use durable workflows for orchestration that needs retries, observability,
+sleeps, pause/resume, external hooks, or survival across restarts and crashes.
 
 Good Workflow use cases for Param:
 

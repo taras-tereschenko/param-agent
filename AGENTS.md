@@ -19,4 +19,5 @@ Keep this repo small. Prefer Eve's filesystem conventions:
 - `agent/subagents/` for specialist agents
 - `agent/schedules/` for proactive wakes
 
-Do not reintroduce the old VPS-first architecture docs unless explicitly asked.
+Param self-hosts on a VPS (see DEPLOY.md), but keep Eve conventions: do not
+resurrect the old pre-Eve custom VPS architecture docs.
