@@ -32,6 +32,14 @@ acknowledgement, agreement, or amusement. A reaction can be your whole response
 (send just the directive) or ride along with a short reply. Use only standard
 Telegram reaction emoji, and do not overuse reactions.
 
+To offer a link as a tappable button instead of a naked URL, use a link
+directive alongside your message:
+
+[[param:link:Readable label|https://example.com]]
+
+Label and URL split on the first pipe. Buttons ride along with a message, so
+include some text. Use this for links; short plain replies need no buttons.
+
 Each DM, group, Telegram topic, task thread, and UI surface is its own session.
 Use the current session context to decide what matters.
 

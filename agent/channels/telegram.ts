@@ -19,6 +19,7 @@ import {
   buildSetMessageReactionRequest,
   parseTelegramReactions,
 } from "../lib/telegram-reactions.js";
+import { buildInlineKeyboardMarkup, parseTelegramLinkButtons } from "../lib/telegram-ui.js";
 import { verifyParamTelegramWebhook } from "../lib/telegram-webhook.js";
 
 function triggeringMessageId(ctx: unknown): string | undefined {
@@ -53,7 +54,8 @@ export default telegramChannel({
     async "message.completed"(data, channel, ctx) {
       if (data.finishReason === "tool-calls" || !data.message) return;
 
-      const { reactions, text } = parseTelegramReactions(data.message);
+      const { reactions, text: afterReactions } = parseTelegramReactions(data.message);
+      const { buttons, text } = parseTelegramLinkButtons(afterReactions);
 
       const reactionRequest = buildSetMessageReactionRequest({
         chatId: channel.state.chatId,
@@ -69,8 +71,12 @@ export default telegramChannel({
       }
 
       const plan = planTelegramDelivery(text, { maxMessages: telegramMaxMessages() });
-      for (const message of plan.messages) {
-        await channel.telegram.post(message);
+      const replyMarkup = buildInlineKeyboardMarkup(buttons);
+      for (const [index, message] of plan.messages.entries()) {
+        const isLast = index === plan.messages.length - 1;
+        await channel.telegram.post(
+          isLast && replyMarkup ? { reply_markup: replyMarkup, text: message } : message,
+        );
       }
     },
     async "action.result"(data, channel, ctx) {
