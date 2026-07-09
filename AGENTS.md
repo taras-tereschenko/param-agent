@@ -73,8 +73,6 @@ After implementing a feature and before committing it:
 - Run the normal deterministic checks for the touched subsystem.
 - Address actionable findings before committing.
 - Re-run relevant checks after fixes.
-- Do not use subagents unless the user explicitly asks; they are too expensive
-  for the default workflow.
 - In the final work summary, mention what local review/checks passed.
 
 ## Reference Repos

@@ -274,6 +274,5 @@ The VPS/native implementation is done when:
 - Use official setup/install paths for frameworks and packages.
 - Do not guess dependency versions; install with Bun and commit the resolved
   lockfile.
-- Do not use subagents unless the user explicitly asks.
 - Do not reintroduce Docker as a default requirement.
 - Do not build around an unproven actor inference path.
