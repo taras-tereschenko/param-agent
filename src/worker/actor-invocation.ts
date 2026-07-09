@@ -77,6 +77,16 @@ export async function runActorInvocation(
     return { ran: false, delivered: 0, stayedQuiet: true };
   }
 
+  // Retry safety: if this run already produced outputs (a crash re-claimed the
+  // job), do not re-run inference or re-deliver. Param must never deliver
+  // duplicate visible output, so we favor no-duplicate over at-least-once.
+  const priorOutputs = await runsRepository.listOutputsForRun(db, run.id);
+  if (priorOutputs.length > 0) {
+    await runsRepository.markRunStatus(db, run.id, "completed");
+    await sessionsRepository.setActiveRun(db, run.sessionId, null);
+    return { ran: false, delivered: 0, stayedQuiet: true };
+  }
+
   await runsRepository.markRunStatus(db, run.id, "running");
 
   try {
@@ -130,14 +140,25 @@ export async function runActorInvocation(
       knownEventIds: ctx.knownEventIds,
     });
 
-    // Persist every structured output (visible + internal).
+    // Persist every structured output (visible + internal), capturing the row
+    // ids of visible outputs so delivery can be tracked per output.
+    const messagesToDeliver: {
+      outputId: string;
+      text: string;
+      replyToEventId?: string;
+    }[] = [];
+    const reactionsToDeliver: {
+      outputId: string;
+      targetEventId: string;
+      emoji: string;
+    }[] = [];
     let sequence = 0;
     for (const draft of turn.drafts) {
       const seq = sequence;
       sequence += 1;
       const isVisible =
         draft.type === "message" || draft.type === "react_to_message";
-      await runsRepository.insertActorOutput(db, {
+      const { output } = await runsRepository.insertActorOutput(db, {
         id: newId(),
         type: draft.type,
         sessionId: run.sessionId,
@@ -148,15 +169,28 @@ export async function runActorInvocation(
         validationStatus: "valid",
         deliveryStatus: isVisible ? "pending" : "not_applicable",
       });
+      if (draft.type === "message") {
+        messagesToDeliver.push({
+          outputId: output.id,
+          text: draft.payload.text,
+          replyToEventId: draft.payload.replyToEventId,
+        });
+      } else if (draft.type === "react_to_message") {
+        reactionsToDeliver.push({
+          outputId: output.id,
+          targetEventId: draft.payload.targetEventId,
+          emoji: draft.payload.emoji,
+        });
+      }
     }
 
-    // Deliver visible messages.
+    // Deliver visible messages, tracking delivery status per output.
     let delivered = 0;
     const target = {
       chatId: session.platformChatId,
       messageThreadId: session.messageThreadId ?? undefined,
     };
-    for (const message of turn.visibleMessages) {
+    for (const message of messagesToDeliver) {
       const replyToPlatformMessageId = message.replyToEventId
         ? platformMessageIds.get(message.replyToEventId)
         : undefined;
@@ -166,28 +200,30 @@ export async function runActorInvocation(
           replyToPlatformMessageId,
         });
         delivered += 1;
+        await runsRepository.setOutputDelivery(db, message.outputId, "succeeded");
         await ingestInternalEvent(db, {
           sessionId: run.sessionId,
           eventType: "delivery.succeeded",
-          dedupeKey: `delivery.succeeded:${run.id}:${delivered}:${sent.messageId}`,
+          dedupeKey: `delivery.succeeded:${message.outputId}`,
           source: { kind: "param" },
           actorRunId: run.id,
           payload: {
-            outputId: run.id,
+            outputId: message.outputId,
             platformMessageId: sent.messageId,
             deliveredAt: nowIso(),
             adapter: "telegram",
           },
         });
       } catch (error) {
+        await runsRepository.setOutputDelivery(db, message.outputId, "failed");
         await ingestInternalEvent(db, {
           sessionId: run.sessionId,
           eventType: "delivery.failed",
-          dedupeKey: `delivery.failed:${run.id}:${newId()}`,
+          dedupeKey: `delivery.failed:${message.outputId}`,
           source: { kind: "param" },
           actorRunId: run.id,
           payload: {
-            outputId: run.id,
+            outputId: message.outputId,
             failedAt: nowIso(),
             adapter: "telegram",
             error: {
@@ -201,12 +237,18 @@ export async function runActorInvocation(
     }
 
     // Deliver reactions.
-    for (const reaction of turn.reactions) {
+    for (const reaction of reactionsToDeliver) {
       const pmid = platformMessageIds.get(reaction.targetEventId);
       if (pmid) {
         try {
           await deps.delivery.react(session.platformChatId, pmid, reaction.emoji);
+          await runsRepository.setOutputDelivery(
+            db,
+            reaction.outputId,
+            "succeeded",
+          );
         } catch (error) {
+          await runsRepository.setOutputDelivery(db, reaction.outputId, "failed");
           logger.warn("reaction delivery failed", {
             error: error instanceof Error ? error.message : String(error),
           });

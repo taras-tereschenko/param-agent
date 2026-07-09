@@ -85,5 +85,5 @@ export async function markMemoryUsed(
   await db
     .update(memoryRecords)
     .set({ lastUsedAt: now })
-    .where(sql`${memoryRecords.id} = any(${ids})`);
+    .where(sql`${memoryRecords.id} = any(${ids}::uuid[])`);
 }

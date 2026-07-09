@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import type { JsonObject } from "../schema";
 import type { ParamDb } from "../client";
@@ -117,6 +117,32 @@ export async function upsertPlatformChat(
   input: UpsertPlatformChatInput,
 ): Promise<{ id: string }> {
   const now = new Date();
+  // The unique index uses coalesce(message_thread_id,'') which cannot be an
+  // ON CONFLICT arbiter target, so match-then-write explicitly.
+  const threadId = input.messageThreadId ?? null;
+  const [existing] = await db
+    .select({ id: platformChats.id })
+    .from(platformChats)
+    .where(
+      and(
+        eq(platformChats.platform, input.platform),
+        eq(platformChats.accountId, input.accountId),
+        eq(platformChats.platformChatId, input.platformChatId),
+        threadId === null
+          ? isNull(platformChats.messageThreadId)
+          : eq(platformChats.messageThreadId, threadId),
+      ),
+    )
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(platformChats)
+      .set({ lastSeenAt: now, updatedAt: now, title: input.title ?? null })
+      .where(eq(platformChats.id, existing.id));
+    return existing;
+  }
+
   const [row] = await db
     .insert(platformChats)
     .values({
@@ -125,20 +151,12 @@ export async function upsertPlatformChat(
       platformChatId: input.platformChatId,
       chatType: input.chatType,
       title: input.title ?? null,
-      messageThreadId: input.messageThreadId ?? null,
+      messageThreadId: threadId,
       rawChat: input.rawChat,
-    })
-    .onConflictDoUpdate({
-      target: [
-        platformChats.platform,
-        platformChats.accountId,
-        platformChats.platformChatId,
-      ],
-      set: { lastSeenAt: now, updatedAt: now, title: input.title ?? null },
     })
     .returning({ id: platformChats.id });
   if (!row) {
-    throw new Error("platform chat upsert failed");
+    throw new Error("platform chat insert failed");
   }
   return row;
 }
