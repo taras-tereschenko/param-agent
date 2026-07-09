@@ -117,26 +117,43 @@ ai
 @ai-sdk/sandbox-vercel
 ```
 
-Param includes AI SDK harness packages for the optional sandboxed Codex runtime
-adapter mode.
+Param includes AI SDK harness packages because the official HarnessAgent path is
+the preferred first integration to try for sandboxed Codex chat-brain support
+and other harness-backed runtime adapters.
 
-Param starts with the local Codex CLI through the Codex runtime adapter because
-that uses the existing Codex subscription path and can run on the VPS/native
-host. Param should not make direct paid API model calls by default.
+Param should not assume the local Codex CLI subscription path can be used as
+primary Session Actor inference. The actor inference path must be proven first.
+Codex local CLI support is still valuable as a task/runtime adapter on the
+VPS/native host.
+
+Codex CLI chat-brain support is an explicit target. The Codex adapter should
+try the AI SDK `HarnessAgent` plus `@ai-sdk/harness-codex` path first when
+sandboxed harness execution fits the deployment. It should also keep a direct
+local CLI path for VPS/native operation. Either path must pass capability tests
+for stable inference, session continuity, steering, output validation, and
+Action Review compatibility before Param relies on it as the Session Actor.
+
+Param should avoid direct paid API model calls as the casual default, but direct
+provider packages remain allowed when explicitly configured with budgets because
+a reliable actor model path matters more than preserving a false free-runtime
+assumption.
 
 `HarnessAgent` gives Param an official AI SDK surface for established agent
 harnesses such as Codex while preserving sessions, sandboxed workspaces, skills,
-compaction, runtime configuration, and stream compatibility.
+compaction, runtime configuration, permission flow hooks, and stream
+compatibility.
 
 AI SDK is still not Param's runtime boundary. Codex, OpenCode, Antigravity, and
 other CLIs still sit behind `src/runtimes/` adapters because Param must control
 session routing, workspaces, steering, output buffering, artifacts, Action
 Review, audit, and channel delivery.
 
-The Codex adapter should implement local direct CLI control first. It can also
-support `HarnessAgent` with `@ai-sdk/harness-codex` for sandboxed sessions.
-`@ai-sdk/sandbox-vercel` is the currently supported sandbox provider for that
-harness path, but it is not the default VPS actor runtime.
+The Codex adapter should support `HarnessAgent` with `@ai-sdk/harness-codex` for
+sandboxed sessions and local direct CLI control for VPS/native coding,
+research, repo, server-management tasks, and Codex chat-brain fallback/proof
+work. `@ai-sdk/sandbox-vercel` is the currently supported sandbox provider for
+that harness path, but it is not automatically the default VPS actor inference
+path until proven.
 
 Install AI SDK harness packages from the `beta` dist-tag when available. Use
 canary only when a needed harness package has no beta release yet. Install them
@@ -149,7 +166,8 @@ channel, deterministic orchestrator, Action Review, memory, and runtime adapter
 boundaries. Eve can be reconsidered later as a reference pattern or optional
 runtime adapter after the core Param loop is working.
 
-Do not use AI SDK provider packages for direct paid model calls by default.
+Do not install AI SDK provider packages just because they exist. Add them when a
+configured actor inference path or runtime adapter actually needs them.
 
 Optional provider packages are added only when enabled in config:
 

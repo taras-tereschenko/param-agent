@@ -1,11 +1,14 @@
 # Param Agent Docs
 
-This folder describes the target architecture for Param Agent.
+This folder describes the target architecture for the VPS/native Param Agent
+branch.
 
 These docs are reference material. Do not read every file before implementing.
 
 Implementation agents should start with:
 
+- `../PARAM.md`
+- `../GOAL.md`
 - `../AGENTS.md`
 - `IMPLEMENTATION_GUIDE.md`
 

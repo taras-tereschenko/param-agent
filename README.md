@@ -18,6 +18,8 @@ helpful-assistant helpdesk.
 For implementation agents:
 
 ```text
+PARAM.md
+GOAL.md
 AGENTS.md
 docs/IMPLEMENTATION_GUIDE.md
 docs/DECISIONS.md
@@ -71,9 +73,13 @@ Drizzle
 Bun SQL
 local Postgres + pgvector
 Vercel Chat SDK
-Codex CLI runtime adapter
+Codex / OpenCode / Antigravity runtime adapters
 MCP TypeScript SDK
 Zod
 ```
 
 Detailed package choices live in `docs/DEPENDENCIES.md`.
+
+Important: the actor inference path must be proven before building large
+features. Runtime CLIs are task adapters by default, not guaranteed chat model
+providers.

@@ -70,7 +70,8 @@ Good uses for `param.config.local.ts`:
 
 - local filesystem paths
 - enabled or disabled runtimes
-- preferred default runtime
+- preferred actor inference path after it has been proven
+- selecting Codex CLI chat-brain mode once the Codex adapter supports it
 - personal scheduler limits
 - channel mode such as Telegram polling vs webhook
 - non-secret labels, ids, and feature flags
@@ -919,10 +920,12 @@ skip
 
 Default target posture:
 
-- Codex is enabled and required because it is the first/default main actor
-  runtime.
-- Codex defaults to `adapter: "direct-cli"` so it runs the installed local
-  Codex CLI on the host.
+- Actor inference is configured separately from CLI runtime availability and
+  must use a proven model path.
+- Codex defaults to `adapter: "direct-cli"` so it can run the installed local
+  Codex CLI on the host for Codex task/runtime work.
+- Codex CLI chat-brain mode is a supported target config once capability tests
+  prove the adapter can run Session Actor turns reliably.
 - `adapter: "ai-sdk-harness"` remains valid for an explicit sandboxed harness
   mode when a supported sandbox provider is configured.
 - OpenCode is enabled but warning-only at startup until its adapter is ready.

@@ -5,32 +5,28 @@ Start here when implementing Param.
 Do not read all docs into context. The docs are reference material. Load only
 the small set needed for the subsystem you are touching.
 
-## New Architecture Docs
+## VPS/Native Source Of Truth
 
-For current architecture/product work, read only:
+This branch is the VPS/native implementation plan.
 
-1. `new-docs/README.md`
-2. `new-docs/VISION.md`
-3. `new-docs/DECISIONS.md`
-4. `new-docs/ARCHITECTURE.md`
-5. `new-docs/STACK.md`
-6. `new-docs/BUILD_PLAN.md`
+For product or architecture work, read:
 
-Treat the older `docs/` folder as historical reference unless `new-docs/`
-explicitly points to it.
+1. `PARAM.md`
+2. `GOAL.md`
+3. `docs/README.md`
 
 ## Required First Read
 
-For legacy VPS-first implementation work only, read in this order:
+For implementation work, read in this order:
 
-1. `docs/IMPLEMENTATION_GUIDE.md`
-2. `docs/DECISIONS.md`
-3. `docs/DEPENDENCIES.md`
-4. `docs/PROJECT_STRUCTURE.md`
+1. `PARAM.md`
+2. `GOAL.md`
+3. `docs/IMPLEMENTATION_GUIDE.md`
+4. `docs/DECISIONS.md`
+5. `docs/DEPENDENCIES.md`
+6. `docs/PROJECT_STRUCTURE.md`
 
 Then read the subsystem docs named by the implementation guide.
-
-For new architecture work, skip this legacy read order and use `new-docs/`.
 
 ## Core Rules
 
@@ -41,7 +37,10 @@ For new architecture work, skip this legacy read order and use `new-docs/`.
 - External agent CLIs always sit behind Param runtime adapters.
 - Consequential actions go through Param Action Review.
 - Memory must be scoped and retrieved, not only stored.
-- The current target stack and product decisions live in `new-docs/`.
+- The current target stack and product decisions for this branch live in
+  `docs/`, `PARAM.md`, and `GOAL.md`.
+- Codex, OpenCode, and Antigravity are runtime/task adapters by default; do not
+  assume they are primary chat inference providers without proving it first.
 
 ## Official Setup Rule
 
@@ -72,12 +71,11 @@ tooling, use the official setup path first.
 After implementing a feature and before committing it:
 
 - Run the normal deterministic checks for the touched subsystem.
-- Run at least two review subagents when subagent tooling is available.
-- Give each reviewer a distinct focus area so they do not duplicate each other.
 - Address actionable findings before committing.
 - Re-run relevant checks after fixes.
-- In the final work summary, mention the reviewers' focus areas, what they
-  found, and which checks passed.
+- Do not use subagents unless the user explicitly asks; they are too expensive
+  for the default workflow.
+- In the final work summary, mention what local review/checks passed.
 
 ## Reference Repos
 

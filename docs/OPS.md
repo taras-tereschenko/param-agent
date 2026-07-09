@@ -486,7 +486,8 @@ Checklist behavior:
 
 - checked means install if missing, then verify command availability
 - unchecked means do not install; keep runtime availability as configured
-- Codex is the first/default actor runtime and should normally stay checked
+- Codex should stay easy to install because it is an important coding/research
+  runtime adapter, but it is not assumed to be the primary chat inference path
 - OpenCode and Antigravity are enabled target runtimes and should be easy to
   install at setup time
 - exact install commands belong in implementation/runtime installer manifests

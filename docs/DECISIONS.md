@@ -119,16 +119,27 @@ in `BUILD_SPEC.md`.
 - Runtime adapters target Codex, Antigravity, OpenCode, image generation,
   browser automation, custom CLIs, and future harness runtimes such as Pi.
 - Detailed runtime-adapter behavior lives in `docs/RUNTIME_ADAPTERS.md`.
-- Codex CLI is the first/default main actor runtime because it can use the
-  existing Codex subscription path.
-- Direct paid API model calls are not part of the default runtime.
+- The Session Actor inference path must be proven before building large
+  features on top of it.
+- Do not assume Codex CLI subscription access can be used as Param's primary
+  chat actor inference.
+- Codex CLI as Session Actor chat brain is still a first-class target mode.
+  Param should support it through the Codex adapter when local CLI or official
+  harness integration proves stable inference, session continuity, steering,
+  output validation, and Action Review compatibility.
+- Direct paid API model calls are not desired as the casual default, but they
+  remain an explicit option if they are the only reliable model path and the
+  owner configures budget limits.
 - External agent CLIs always sit behind Param runtime adapters.
-- OpenCode and Antigravity are enabled target runtimes, but they can be
-  warning-only at startup while Codex is the first required actor runtime.
+- Codex, OpenCode, and Antigravity are enabled target runtimes, but they can be
+  warning-only at startup until their adapters and install paths are ready.
 - Local direct Codex CLI execution is the default Codex adapter mode on the
-  VPS/native host.
-- AI SDK `HarnessAgent` is an accepted Codex adapter mode for sandboxed harness
-  sessions, but it does not force Vercel Sandbox as the default runtime path.
+  VPS/native host for Codex task/runtime work and is also the preferred path to
+  investigate for Codex chat-brain support.
+- AI SDK `HarnessAgent` is the preferred official harness path to try for
+  Codex chat-brain mode when sandboxed harness execution is acceptable, but it
+  still does not by itself prove primary Session Actor inference and does not
+  force Vercel Sandbox as the only runtime path.
 - AI SDK beta harness packages are preferred when available. Canary harness
   packages are allowed only as a temporary fallback when a needed harness
   package has no beta release.

@@ -172,6 +172,9 @@ Relevant lessons:
   sub-agents.
 - `HarnessAgent.generate()` and `HarnessAgent.stream()` return AI SDK-compatible
   results.
+- The Vercel changelog says the same `HarnessAgent` flow can swap Claude Code
+  for Codex or Pi, so Param should treat this as the preferred official path to
+  try for sandboxed Codex chat-brain mode.
 - AI SDK harness packages remain experimental. Prefer beta dist-tags when
   available, use canary only as a temporary fallback, and let Bun plus
   `bun.lock` record exact resolved versions.

@@ -39,22 +39,31 @@ still owns:
 
 ## AI SDK Harnesses Inside Runtime Adapters
 
-Param starts with Codex CLI through the Codex runtime adapter.
+Param supports Codex CLI through the Codex runtime adapter.
 
 Local direct Codex CLI execution is the default implementation path for the
-Codex adapter on the VPS/native host.
+Codex adapter on the VPS/native host for Codex task/runtime work.
 
-AI SDK beta harnesses are an accepted optional implementation path for sandboxed
-Codex sessions.
+Codex CLI chat-brain mode is a first-class target for the same adapter. Param
+should support using Codex as the Session Actor when the adapter proves stable
+chat inference, session continuity, steering, output validation, and Action
+Review compatibility.
 
-Direct paid API model calls are not part of the default runtime.
+AI SDK beta harnesses are the preferred official implementation path to try for
+sandboxed Codex chat-brain sessions and other supported harness-backed runtime
+adapters.
+
+Direct paid API model calls are not the preferred casual default, but the
+Session Actor still needs a proven inference path. Runtime adapters must not
+pretend a CLI can provide chat inference unless that capability has been tested
+and documented.
 
 AI SDK still does not replace Param runtime adapters.
 
 `HarnessAgent` gives Param an official AI SDK surface for agent harnesses such
 as Codex, Pi, and Claude Code. It can manage harness sessions, sandboxed
-workspaces, skills, runtime configuration, compaction, and AI SDK-compatible
-streams.
+workspaces, skills, runtime configuration, permission flows, compaction, and AI
+SDK-compatible streams.
 
 Param still needs runtime adapters because coding agents have their own process
 lifecycle, auth, workspaces, sandboxing, approval modes, internal tools,
@@ -69,9 +78,12 @@ It is not the boundary between Param core and a runtime.
 
 Current harness posture:
 
-- Codex should use the local installed `codex` CLI by default.
-- Codex can use `HarnessAgent` with `@ai-sdk/harness-codex` when the runtime
-  config explicitly selects `adapter: "ai-sdk-harness"`.
+- Codex should try `HarnessAgent` with `@ai-sdk/harness-codex` first for
+  sandboxed Codex chat-brain mode when the deployment supports it.
+- Codex should also support the local installed `codex` CLI for VPS/native
+  task/runtime work and as a direct chat-brain proof/fallback path.
+- Runtime config selects between `adapter: "ai-sdk-harness"` and
+  `adapter: "direct-cli"`.
 - `@ai-sdk/sandbox-vercel` is the supported sandbox provider for that harness
   path today; it is not Param's default local execution path.
 - Pi can use the same harness pattern later if enabled.
@@ -229,9 +241,15 @@ One physical runtime can support multiple categories.
 Example:
 
 ```text
-Codex can be used as the main actor runtime, a coding task runtime, or a
-research task runtime if configured that way.
+Codex can be used as a coding task runtime, research task runtime, repo
+inspection runtime, or server-management planning runtime if configured that
+way.
 ```
+
+Codex chat-brain mode is explicitly supported as a target. It may be used for
+main actor runs after a specific integration proves stable actor inference,
+session continuity, steering behavior, output validation, and Action Review
+compatibility.
 
 ## Lifecycle
 
@@ -479,12 +497,16 @@ Visible chat text still passes through Param's style guard.
 
 Codex can be used for:
 
-- main actor runs
+- Session Actor chat-brain mode when proven
 - coding task agents
 - research task agents
 - repo inspection
 - patch generation
 - server-management planning
+
+Main actor runs are a desired Codex adapter capability. They are allowed when a
+Codex integration proves it can provide stable actor inference. Until then,
+treat Codex as a task/runtime adapter and keep the blocker visible.
 
 Preferred implementation:
 

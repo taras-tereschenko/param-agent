@@ -131,6 +131,30 @@ Admin Surface
   private server controls, configuration, health, recovery
 ```
 
+## Actor Inference Path
+
+The Session Actor is model-powered, but the model path must be proven before
+large features are built on top of it.
+
+Codex CLI as the Session Actor chat brain is a first-class target mode. Param
+should support it if the Codex adapter proves stable actor inference through the
+local CLI or an official harness path.
+
+AI SDK `HarnessAgent` is the preferred official harness path to try for
+sandboxed Codex chat-brain mode. Direct local Codex CLI control remains
+important for VPS/native operation and as a fallback/proof path.
+
+Do not assume Codex CLI subscription access automatically works as Param's
+primary chat actor inference. Codex, OpenCode, and Antigravity are runtime/task
+adapters by default unless a specific integration proves stable actor inference,
+session continuity, steering behavior, output validation, and Action Review
+compatibility.
+
+Possible actor inference paths include a direct configured model provider, a
+local/self-hosted model, a cheap/free hosted model, a hybrid triage-plus-task
+model flow, Codex CLI chat-brain mode through a Param adapter, or an official
+CLI/harness integration that proves it can safely serve Session Actor turns.
+
 ## Programmatic And LLM Layers
 
 Param has a hard boundary between mechanics and judgment.

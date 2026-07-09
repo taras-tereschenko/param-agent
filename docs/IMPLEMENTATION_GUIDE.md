@@ -189,12 +189,18 @@ Acceptance check:
 incoming message -> actor job -> validated output -> delivery record
 ```
 
-### 7. Codex Actor Runtime And Style Guard
+### 7. Actor Inference Path And Style Guard
 
-Add model-backed actor behavior:
+Prove model-backed actor behavior before building deeper features on top of it:
 
-- Codex runtime adapter running the local installed Codex CLI first
-- optional AI SDK beta `HarnessAgent` mode for sandboxed Codex sessions
+- one documented actor inference path that can run Session Actor turns
+- explicit note if the path is paid, local, free-tier, harness-based, or hybrid
+- no assumption that Codex CLI subscription access is enough for chat inference
+- Codex CLI chat-brain proof through AI SDK `HarnessAgent` plus
+  `@ai-sdk/harness-codex` where sandboxed harness mode fits
+- direct local Codex CLI chat-brain proof/fallback for VPS/native operation
+- Codex runtime adapter for task/runtime work
+- preferred AI SDK beta `HarnessAgent` mode for sandboxed Codex sessions
 - prompt packet compiler
 - structured actor output
 - harness session create/detach/resume/stop handling
@@ -209,9 +215,11 @@ Acceptance check:
 ```text
 actor can reply, react, stay quiet, and request a tool
 visible text follows Param voice rules
-Codex output is buffered before Telegram delivery
-Codex harness state can resume without replaying full chat history
-Param Action Review still wraps consequential Codex actions
+multiple send_message outputs become multiple Telegram bubbles
+runtime output is buffered before Telegram delivery
+session state can resume without replaying full chat history
+Codex CLI chat-brain mode is either working or documented as blocked
+Param Action Review still wraps consequential runtime actions
 ```
 
 ### 8. Action Review And Tools
@@ -251,13 +259,14 @@ group memory does not leak into private user memory
 latest messages survive compaction
 ```
 
-### 10. OpenCode And Antigravity Adapters
+### 10. Codex, OpenCode, And Antigravity Adapters
 
-Complete the other enabled CLI runtimes after the Codex actor path works:
+Complete enabled CLI runtimes after the actor inference path is proven or the
+Codex chat-brain blocker is documented:
 
+- Codex adapter for chat-brain, coding, research, and server tasks
 - OpenCode adapter
 - Antigravity adapter
-- fuller Codex coding/research task support
 - runtime event stream
 - artifact/log capture
 - cancellation or steering fallback
