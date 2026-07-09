@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import baseConfig from "../param.config";
-import { configOverrideFromEnv, mergeConfig } from "../src/config/load";
-import { redactConfig } from "../src/config/redact";
-import { paramConfigSchema } from "../src/config/schema";
+import baseConfig from "../../param.config";
+import { configOverrideFromEnv, mergeConfig } from "../../src/config/load";
+import { redactConfig } from "../../src/config/redact";
+import { paramConfigSchema } from "../../src/config/schema";
 import {
   validateRequiredConfigSecretRefs,
   validateSecretRefs,
-} from "../src/config/secrets";
+} from "../../src/config/secrets";
 
 describe("config schema", () => {
   test("rejects invalid app environment", () => {

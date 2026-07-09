@@ -12,7 +12,7 @@ import {
   serializeEnvValue,
   type SetupAnswers,
   writeSecretFileIfMissing,
-} from "../src/ops/setup";
+} from "../../src/ops/setup";
 
 const answers: SetupAnswers = {
   ownerTelegramUserId: "123456789",

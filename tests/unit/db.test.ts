@@ -5,20 +5,20 @@ import { join } from "node:path";
 import { getTableName } from "drizzle-orm";
 import { describe, expect, test } from "bun:test";
 
-import baseConfig from "../param.config";
-import { resolveSecretRef } from "../src/config/secrets";
-import { databaseTlsEnabled, resolveDatabaseUrl } from "../src/db/client";
+import baseConfig from "../../param.config";
+import { resolveSecretRef } from "../../src/config/secrets";
+import { databaseTlsEnabled, resolveDatabaseUrl } from "../../src/db/client";
 import {
   jobStatusSchema,
   validateEventJsonColumns,
   validateRawPayloadJsonColumns,
-} from "../src/db/repositories";
+} from "../../src/db/repositories";
 import {
   coreDatabaseConstraints,
   coreDatabaseIndexes,
   coreDatabaseTables,
-} from "../src/db/extensions";
-import { schema } from "../src/db/schema";
+} from "../../src/db/extensions";
+import { schema } from "../../src/db/schema";
 
 describe("database config", () => {
   test("resolves database url from env secret refs", () => {

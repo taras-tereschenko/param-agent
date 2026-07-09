@@ -4,13 +4,13 @@ import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/bun-sql/migrator";
 import { describe, expect, test } from "bun:test";
 
-import { createDbClient } from "../src/db/client";
+import { createDbClient } from "../../src/db/client";
 import {
   checkDatabaseConnection,
   ensureDatabaseExtensions,
   listMissingDatabaseExtensions,
-} from "../src/db/extensions";
-import { eventsRepository, jobsRepository } from "../src/db/repositories";
+} from "../../src/db/extensions";
+import { eventsRepository, jobsRepository } from "../../src/db/repositories";
 import {
   auditLog,
   channelAccounts,
@@ -20,9 +20,9 @@ import {
   userAccounts,
   users,
   jobs,
-} from "../src/db/schema";
-import type { ParamConfig } from "../src/config/schema";
-import baseConfig from "../param.config";
+} from "../../src/db/schema";
+import type { ParamConfig } from "../../src/config/schema";
+import baseConfig from "../../param.config";
 
 const databaseUrl = Bun.env.PARAM_TEST_DATABASE_URL;
 
