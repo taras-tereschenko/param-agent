@@ -40,6 +40,7 @@ Subsystem docs:
 - `TOOLS.md` explains MCP, local tools, execution, policy, and audit.
 - `UI.md` explains structured UI, callbacks, and Mini Apps.
 - `channels/TELEGRAM.md` is the first concrete channel adapter.
+- `CODEX_CHAT_BRAIN_PROOF.md` records the actor-inference gate result.
 - `REFERENCES.md` records source notes and lessons from existing systems.
 
 ## Architecture Map

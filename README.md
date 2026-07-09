@@ -40,18 +40,41 @@ Load only the subsystem docs needed for the current change.
 
 ## Current State
 
-This repo currently contains architecture docs plus the first runnable Bun /
-TypeScript scaffold:
+The full VPS/native system is implemented as modular subsystems with a
+deterministic orchestrator, an LLM-pluggable Session Actor, Action Review,
+scoped memory, runtime adapters, scheduler, UI renderer, task agents, and
+end-to-end worker wiring.
 
 ```text
-bun run setup
-bun run doctor
-bun run check
+bun install
+bun run setup          # create missing .env + param.config.local.ts, check runtimes
+bun run check          # typecheck + unit tests (no live Telegram/Postgres needed)
+bun run host-install --dry-run   # print the cross-platform install action plan
+bun run db:migrate     # apply schema + pgcrypto/vector + semantic indexes
+bun run db:check       # verify extensions + core/extended tables
+bun run test:db        # integration tests (needs PARAM_TEST_DATABASE_URL)
+bun run discover-telegram   # print recent Telegram ids (needs TELEGRAM_BOT_TOKEN)
+bun run start          # Hono app (health/webhook/mini-app/operator)
+bun run start:worker   # polling + jobs + actor runs + recovery
 ```
 
-`setup` creates missing local `.env` and `param.config.local.ts` files.
-`doctor` prints the effective config in redacted form.
-`check` runs typecheck and tests.
+Implemented subsystems: `src/contracts` (typed event/output/tool/UI/runtime
+contracts), `src/db` (Drizzle schema + migrations + repositories),
+`src/prompts` (compiler with the verbatim human-text base), `src/orchestrator`
+(session keys, batching, steering, locks, recovery), `src/channels/telegram`
+(access policy, normalization, transport, delivery), `src/actor` (inference
+interface, MockActor, validation, style guard, runner), `src/action-review`,
+`src/memory` (scope isolation, ranking, review, compaction), `src/tools`
+(registry, policy, executor, MCP), `src/runtimes` (Codex/OpenCode/Antigravity
+adapters + placeholders), `src/skills`, `src/scheduler`, `src/ui`,
+`src/task-agents`, `src/ops`, `src/observability`, `src/security`.
+
+### Session Actor inference
+
+The Codex CLI chat-brain path is a first-class target but is unproven in this
+build environment. See `docs/CODEX_CHAT_BRAIN_PROOF.md` for the gate result,
+exact blockers, and the safe pluggable fallback (the deterministic `MockActor`
+drives the full loop until a real inference path is configured).
 
 The referenced systems live in:
 
