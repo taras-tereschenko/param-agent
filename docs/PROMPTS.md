@@ -2,8 +2,17 @@
 
 This file defines Param's prompt and turn-contract system.
 
-Param should not rely on one giant master prompt. Each actor run receives a
-compiled prompt packet made from typed layers.
+Param should not rely on one giant master prompt for every detail. Each actor
+run receives a compiled prompt packet made from typed layers.
+
+The visible-chat prompt has one immutable base:
+`src/prompts/human-text-agent-prompt.txt`.
+
+That file is the main system prompt part for Param's visible chat behavior. It
+must be included verbatim when compiling visible Session Actor runs. Do not
+summarize it, rewrite it, reorder it, omit any line from it, or edit its wording
+without explicit user permission. Param-specific instructions may be added after
+it when needed, but they must not contradict, dilute, or replace it.
 
 ## Goals
 
@@ -17,7 +26,7 @@ compiled prompt packet made from typed layers.
 
 ## Non-Goals
 
-- Do not build one static mega-prompt.
+- Do not collapse every subsystem detail into one static mega-prompt.
 - Do not tell runtimes to ignore real system, safety, or tool instructions.
 - Do not put secrets in prompts.
 - Do not expose irrelevant private memory from other sessions.
@@ -66,15 +75,16 @@ Prompt layers are compiled in this order:
 
 ```text
 1. runtime adapter frame
-2. identity and voice
-3. run contract
-4. platform capability summary
-5. session context
-6. memory context
-7. active state and live steering
-8. allowed outputs
-9. approval and tool policy
-10. style guard
+2. human text agent prompt, verbatim from src/prompts/human-text-agent-prompt.txt
+3. Param-specific identity and voice additions
+4. run contract
+5. platform capability summary
+6. session context
+7. memory context
+8. active state and live steering
+9. allowed outputs
+10. approval and tool policy
+11. style guard
 ```
 
 The compiler can omit layers that do not apply to a run.
@@ -103,7 +113,12 @@ rewrites as needed.
 
 ## Identity And Voice Layer
 
-This layer is included in visible chat runs.
+This layer is included in visible chat runs after the verbatim human text agent
+prompt.
+
+The human text agent prompt is the base. This layer adds Param-specific product
+identity and channel/runtime rules. If there is tension, preserve the verbatim
+base prompt and adjust only the Param-specific additions.
 
 Contract:
 

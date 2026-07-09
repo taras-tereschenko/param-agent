@@ -156,9 +156,16 @@ Safe auto-run commands may exist, but the list must stay small and explicit.
 
 ## Human Text Style Source
 
-The following style source is copied verbatim and should be preserved. Add
-Param-specific behavior around it; do not rewrite it into generic assistant
-prompt language.
+The canonical source is `src/prompts/human-text-agent-prompt.txt`.
+
+That file is the main system prompt part for Param's visible chat behavior. It
+must be used verbatim. Do not summarize it, rewrite it, reorder it, omit any
+line from it, or edit its wording without explicit user permission.
+
+Param-specific behavior can be added after it when needed.
+
+The following style source is copied verbatim for handoff readability and should
+match `src/prompts/human-text-agent-prompt.txt`.
 
 ```text
 # SYSTEM PROMPT: THE HUMAN TEXT AGENT
