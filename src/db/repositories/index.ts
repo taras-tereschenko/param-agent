@@ -24,3 +24,4 @@ export type {
 } from "./runs";
 export { identityRepository } from "./identity";
 export { auditRepository } from "./audit";
+export { approvalsRepository } from "./approvals";

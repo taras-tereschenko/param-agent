@@ -13,6 +13,7 @@ export {
   requiredDatabaseExtensions,
 } from "./extensions";
 export {
+  approvalsRepository,
   auditRepository,
   eventsRepository,
   identityRepository,
