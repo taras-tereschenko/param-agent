@@ -133,6 +133,8 @@ export async function runActorInvocation(
     // Persist every structured output (visible + internal).
     let sequence = 0;
     for (const draft of turn.drafts) {
+      const seq = sequence;
+      sequence += 1;
       const isVisible =
         draft.type === "message" || draft.type === "react_to_message";
       await runsRepository.insertActorOutput(db, {
@@ -140,8 +142,8 @@ export async function runActorInvocation(
         type: draft.type,
         sessionId: run.sessionId,
         actorRunId: run.id,
-        sequence: sequence++,
-        idempotencyKey: idempotencyKeys.actorOutput(run.id, sequence),
+        sequence: seq,
+        idempotencyKey: idempotencyKeys.actorOutput(run.id, seq),
         payload: draft.payload as Record<string, unknown>,
         validationStatus: "valid",
         deliveryStatus: isVisible ? "pending" : "not_applicable",
