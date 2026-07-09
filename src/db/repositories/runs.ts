@@ -37,6 +37,18 @@ export async function createActorRun(
   return rows[0];
 }
 
+export async function getActorRunById(
+  db: ParamDb,
+  id: string,
+): Promise<ActorRun | undefined> {
+  const [row] = await db
+    .select()
+    .from(actorRuns)
+    .where(eq(actorRuns.id, id))
+    .limit(1);
+  return row;
+}
+
 export async function findActiveRunForSession(
   db: ParamDb,
   sessionId: string,
@@ -254,6 +266,7 @@ export function isTerminalRunStatus(status: string): boolean {
 
 export const runsRepository = {
   createActorRun,
+  getActorRunById,
   findActiveRunForSession,
   heartbeatRun,
   markRunStatus,
