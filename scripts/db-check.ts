@@ -5,6 +5,7 @@ import {
   listMissingCoreDatabaseIndexes,
   listMissingDatabaseExtensions,
   listMissingCoreDatabaseTables,
+  listMissingExtendedDatabaseTables,
 } from "../src/db/extensions";
 import { loadConfig } from "../src/config/load";
 import type { ParamDb } from "../src/db/client";
@@ -43,6 +44,13 @@ async function main() {
     if (missingConstraints.length > 0) {
       throw new Error(
         `database schema is incomplete; missing core constraints: ${missingConstraints.join(", ")}`,
+      );
+    }
+
+    const missingExtendedTables = await listMissingExtendedDatabaseTables(db);
+    if (missingExtendedTables.length > 0) {
+      throw new Error(
+        `database schema is incomplete; missing extended tables: ${missingExtendedTables.join(", ")}`,
       );
     }
 

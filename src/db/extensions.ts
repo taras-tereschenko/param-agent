@@ -48,9 +48,66 @@ export type CoreDatabaseTable = (typeof coreDatabaseTables)[number];
 export type CoreDatabaseIndex = (typeof coreDatabaseIndexes)[number];
 export type CoreDatabaseConstraint = (typeof coreDatabaseConstraints)[number];
 
+export const extendedDatabaseTables = [
+  "memory_records",
+  "memory_candidates",
+  "memory_links",
+  "summaries",
+  "approvals",
+  "approval_notifications",
+  "schedules",
+  "schedule_fires",
+  "tool_definitions",
+  "mcp_servers",
+  "tool_calls",
+  "task_agents",
+  "task_runs",
+  "skills",
+  "skill_files",
+  "skill_scopes",
+  "skill_tool_requirements",
+  "artifacts",
+  "config_overrides",
+  "decision_records",
+  "health_checks",
+] as const;
+
+export type ExtendedDatabaseTable = (typeof extendedDatabaseTables)[number];
+
 export async function ensureDatabaseExtensions(db: ParamDb): Promise<void> {
   await db.execute(sql`create extension if not exists pgcrypto`);
   await db.execute(sql`create extension if not exists vector`);
+}
+
+/**
+ * Specialized memory indexes that Drizzle does not manage directly: the pgvector
+ * ivfflat index for semantic search, a GIN index for full-text search, and a
+ * GIN index for scoped subject_ref lookups. Idempotent and safe to run after
+ * every migration.
+ */
+export async function ensureSemanticIndexes(db: ParamDb): Promise<void> {
+  await db.execute(
+    sql`create index if not exists memory_records_search_vector_gin on memory_records using gin (search_vector)`,
+  );
+  await db.execute(
+    sql`create index if not exists memory_records_subject_ref_gin on memory_records using gin (subject_ref jsonb_path_ops)`,
+  );
+  await db.execute(
+    sql`create index if not exists memory_records_embedding_ivfflat on memory_records using ivfflat (embedding vector_cosine_ops) with (lists = 100)`,
+  );
+}
+
+export async function listMissingExtendedDatabaseTables(
+  db: ParamDb,
+): Promise<ExtendedDatabaseTable[]> {
+  const rows = await db.execute<{ table_name: string }>(sql`
+    select table_name
+    from information_schema.tables
+    where table_schema = 'public'
+  `);
+  const existing = new Set(rows.map((row) => row.table_name));
+
+  return extendedDatabaseTables.filter((table) => !existing.has(table));
 }
 
 export async function listMissingDatabaseExtensions(

@@ -12,5 +12,17 @@ export {
   listMissingDatabaseExtensions,
   requiredDatabaseExtensions,
 } from "./extensions";
-export { eventsRepository, jobsRepository } from "./repositories";
+export {
+  auditRepository,
+  eventsRepository,
+  identityRepository,
+  jobsRepository,
+  runsRepository,
+  sessionsRepository,
+} from "./repositories";
+export {
+  ensureSemanticIndexes,
+  extendedDatabaseTables,
+  listMissingExtendedDatabaseTables,
+} from "./extensions";
 export { schema } from "./schema";

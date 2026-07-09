@@ -13,6 +13,8 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
+import { extendedSchema } from "./extended";
+
 export type JsonObject = Record<string, unknown>;
 
 export const jobStatuses = [
@@ -528,7 +530,10 @@ export const schema = {
   deliveryAttempts,
   jobs,
   auditLog,
+  ...extendedSchema,
 };
+
+export * from "./extended";
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;

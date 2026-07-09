@@ -1,7 +1,10 @@
 import { migrate } from "drizzle-orm/bun-sql/migrator";
 
 import { createDbClient } from "../src/db/client";
-import { ensureDatabaseExtensions } from "../src/db/extensions";
+import {
+  ensureDatabaseExtensions,
+  ensureSemanticIndexes,
+} from "../src/db/extensions";
 import { loadConfig } from "../src/config/load";
 import type { ParamDb } from "../src/db/client";
 
@@ -16,6 +19,7 @@ async function main() {
 
     await ensureDatabaseExtensions(db);
     await migrate(db, { migrationsFolder });
+    await ensureSemanticIndexes(db);
     console.log("database migrations applied");
   } catch (error) {
     console.error("database migration failed");

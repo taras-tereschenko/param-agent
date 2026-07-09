@@ -11,3 +11,16 @@ export type {
   FailExpiredRunningJobsOptions,
   FailJobOptions,
 } from "./jobs";
+export { sessionsRepository } from "./sessions";
+export type { Session, NewSession } from "./sessions";
+export { runsRepository, activeRunStatuses, isTerminalRunStatus } from "./runs";
+export type {
+  ActorRun,
+  NewActorRun,
+  ActorOutputRow,
+  NewActorOutputRow,
+  DeliveryAttempt,
+  NewDeliveryAttempt,
+} from "./runs";
+export { identityRepository } from "./identity";
+export { auditRepository } from "./audit";
