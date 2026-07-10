@@ -23,6 +23,7 @@ TARGET_DIR="${PARAM_DIR:-$HOME/param-agent}"
 WITH_POSTGRES=0
 RUN_SETUP=1
 PROVISION_DB=0   # set to 1 only when auto DB provisioning is supported here
+DB_READY=0       # set to 1 only after the DB is actually provisioned + migrated
 
 log()  { printf '\n\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mwarn:\033[0m %s\n' "$*" >&2; }
@@ -94,17 +95,6 @@ ensure_cmd() { # ensure_cmd <command> <package>
 pg_su() {
   if command -v sudo >/dev/null 2>&1; then sudo -u postgres "$@";
   elif [ "$(id -u)" -eq 0 ]; then runuser -u postgres -- "$@";
-  else die "need root or sudo to manage Postgres"; fi
-}
-
-# Run `psql` as postgres with PARAM_DB_PW preserved in ITS environment, so the
-# password can be read via psql's \getenv and never appears in argv / ps /
-# /proc/<pid>/cmdline (which cmdline exposes world-readable).
-pg_su_env_psql() {
-  if command -v sudo >/dev/null 2>&1; then
-    sudo --preserve-env=PARAM_DB_PW -u postgres psql "$@"
-  elif [ "$(id -u)" -eq 0 ]; then
-    PARAM_DB_PW="$PARAM_DB_PW" runuser -u postgres -- psql "$@"
   else die "need root or sudo to manage Postgres"; fi
 }
 
@@ -182,27 +172,40 @@ if [ "$PROVISION_DB" -eq 1 ] && [ -f .env ]; then
   # decodes it on connect, so the role must be created with the DECODED password.
   PW="$(bun -e 'try{process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL||"").password))}catch(e){}')"
   if [ -n "$PW" ]; then
-    export PARAM_DB_PW="$PW"
-    # Create-or-update the role WITHOUT the password on argv: psql reads it from
-    # the environment via \getenv, and :'pw' quotes it safely into SQL.
-    pg_su_env_psql >/dev/null 2>&1 <<'SQL' || true
-\getenv pw PARAM_DB_PW
-CREATE ROLE param LOGIN PASSWORD :'pw';
+    # Escape the password for a SQL single-quoted literal by doubling quotes.
+    # With standard_conforming_strings=on (the default since PG 9.1) backslashes
+    # are literal, so quote-doubling alone is injection-safe. The password then
+    # travels ONLY via psql's stdin (the heredoc below) — never on argv / ps /
+    # /proc/<pid>/cmdline, never written to a lasting file. The heredoc is
+    # unquoted so $PW_SQL expands, but shell expansion is single-pass: the $, `,
+    # or $(...) that the password itself may contain are inserted literally and
+    # never re-evaluated. Works on every psql version (no \getenv / PG16 dep).
+    PW_SQL="$(printf '%s' "$PW" | sed "s/'/''/g")"
+    if pg_su psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='param'" | grep -q 1; then
+      pg_su psql -q >/dev/null 2>&1 <<SQL || true
+ALTER ROLE param LOGIN PASSWORD '$PW_SQL';
 SQL
-    pg_su_env_psql >/dev/null 2>&1 <<'SQL' || true
-\getenv pw PARAM_DB_PW
-ALTER ROLE param LOGIN PASSWORD :'pw';
+    else
+      pg_su psql -q >/dev/null 2>&1 <<SQL || true
+CREATE ROLE param LOGIN PASSWORD '$PW_SQL';
 SQL
-    unset PARAM_DB_PW
+    fi
+    unset PW PW_SQL
     pg_su psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='param'" | grep -q 1 \
       || die "could not create the 'param' Postgres role (try: sudo -u postgres psql)"
     pg_su psql -tAc "SELECT 1 FROM pg_database WHERE datname='param'" | grep -q 1 \
       || pg_su createdb -O param param
     pg_su psql -d param -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;" >/dev/null 2>&1 || true
-    pg_su psql -d param -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null 2>&1 || true
+    # pgvector is required by the schema. If it can't be created (package
+    # missing), fail clearly NOW instead of letting db:migrate crash opaquely.
+    if ! pg_su psql -d param -v ON_ERROR_STOP=1 \
+        -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null 2>&1; then
+      die "could not enable the pgvector 'vector' extension in the 'param' database; install the pgvector package for your Postgres (e.g. postgresql-${PGV:-NN}-pgvector) and re-run"
+    fi
     log "running migrations"
     bun run db:migrate
     bun run db:check
+    DB_READY=1
   else
     warn "could not read DATABASE_URL from .env; skipping DB provisioning"
   fi
@@ -215,7 +218,7 @@ Next steps:
   cd $TARGET_DIR
 $([ "$RUN_SETUP" -eq 0 ] && echo "  bun run setup                 # configure (owner id, bot token, DB url)")
   # brain: install Codex CLI + 'codex login' (or set OPENAI_API_KEY), OR use the MockActor
-$([ "$PROVISION_DB" -eq 0 ] && echo "  bun run db:migrate && bun run db:check   # once Postgres+pgvector is available")
+$([ "$DB_READY" -eq 0 ] && echo "  bun run db:migrate && bun run db:check   # once Postgres+pgvector is available")
   bun run start:worker          # polling + jobs + actor runs (foreground to test)
   bun run start                 # Hono app (health endpoints)
 

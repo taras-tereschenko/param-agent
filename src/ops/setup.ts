@@ -143,9 +143,16 @@ PARAM_LOG_LEVEL=info
 export function serializeEnvValue(value: string) {
   // Bun's dotenv expands $VAR / ${VAR} inside .env values even when quoted, so a
   // secret containing `$` (common in strong passwords / DB URLs) would be
-  // mangled — e.g. `p$word` -> `p`. JSON.stringify handles \, ", and control
-  // chars; escaping `$` -> `\$` (which Bun reads back as a literal `$`) covers
-  // the one remaining breaking character. Verified round-trip.
+  // mangled — e.g. `p$word` -> `p`. We wrap in double quotes and escape `$`
+  // -> `\$`, which Bun reads back as a literal `$` (and it performs no command
+  // substitution / backtick expansion, so `$(...)`/backticks are inert once the
+  // leading `$` is escaped). This round-trips exactly for every value the setup
+  // actually serializes: a numeric owner id, the regex-restricted bot token,
+  // and a percent-encoded DATABASE_URL. NOTE: Bun's double-quote parser is not
+  // JSON-compatible — it does not collapse `\\`/`\"` — so a raw literal
+  // backslash or double-quote would NOT round-trip; those never occur in the
+  // serialized fields, and even if they did the effect is a wrong/failed local
+  // DB connect, never disclosure.
   return JSON.stringify(value).replace(/\$/g, "\\$");
 }
 
