@@ -294,9 +294,14 @@ export async function runActorInvocation(
     // Route non-visible outputs (tool_call / approval_request / spawn /
     // memory_candidate) through their safety pipelines.
     if (deps.dispatchOutputs) {
-      const requesterEvent = [...events]
-        .reverse()
-        .find((event) => event.type === "chat.message.received");
+      // SECURITY: the requester for the Action Review trust decision must be
+      // the user who triggered THIS run, not the latest speaker (in a group,
+      // a trusted user speaking mid-debounce must not authorize an untrusted
+      // user's action). Bind to the run's trigger event; fail closed (no
+      // requester -> consequential actions denied) if it is not in the window.
+      const triggerEvent = run.triggerEventId
+        ? events.find((event) => event.id === run.triggerEventId)
+        : undefined;
       await deps.dispatchOutputs(
         {
           runId: run.id,
@@ -304,10 +309,10 @@ export async function runActorInvocation(
           routeType: session.routeType,
           platformChatId: session.platformChatId,
           messageThreadId: session.messageThreadId ?? undefined,
-          requester: requesterEvent
-            ? (requesterEvent.source as unknown as ActorRef)
+          requester: triggerEvent
+            ? (triggerEvent.source as unknown as ActorRef)
             : undefined,
-          requesterEventIds: requesterEvent ? [requesterEvent.id] : [],
+          requesterEventIds: triggerEvent ? [triggerEvent.id] : [],
         },
         turn.drafts,
       );

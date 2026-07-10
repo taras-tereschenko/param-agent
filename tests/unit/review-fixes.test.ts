@@ -91,6 +91,14 @@ describe("over-length handling", () => {
     expect(fixed.endsWith("…")).toBe(true);
   });
 
+  test("truncation runs last: long text with a naked URL stays <= cap", () => {
+    const long = `${"a ".repeat(320)}http://example.com/some/long/path ${"b ".repeat(40)}`;
+    const fixed = applyStyleFixes(long);
+    expect(fixed.length).toBeLessThanOrEqual(MAX_BUBBLE_LENGTH);
+    // and it is not re-flagged (would otherwise be dropped)
+    expect(checkStyle(fixed).some((v) => v.code === "too_long")).toBe(false);
+  });
+
   test("sendText params never exceed the Telegram limit", () => {
     const huge = "x".repeat(TELEGRAM_MAX_MESSAGE_LENGTH + 500);
     expect(truncateForTelegram(huge).length).toBeLessThanOrEqual(

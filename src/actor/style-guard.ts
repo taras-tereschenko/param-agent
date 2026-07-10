@@ -185,12 +185,6 @@ export function passesStyle(text: string): boolean {
  */
 export function applyStyleFixes(text: string): string {
   let out = text;
-  // too long -> truncate at a word boundary near the cap rather than drop.
-  if (out.length > MAX_BUBBLE_LENGTH) {
-    const slice = out.slice(0, MAX_BUBBLE_LENGTH - 1);
-    const lastSpace = slice.lastIndexOf(" ");
-    out = `${(lastSpace > MAX_BUBBLE_LENGTH * 0.6 ? slice.slice(0, lastSpace) : slice).trimEnd()}…`;
-  }
   // em-dash -> comma
   out = out.replace(/\s*—\s*/g, ", ");
   // bold markers
@@ -209,6 +203,13 @@ export function applyStyleFixes(text: string): string {
   const trimmed = out.trim();
   if (isShortConversational(trimmed) && /[^.]\.$/.test(trimmed)) {
     out = trimmed.replace(/\.$/, "");
+  }
+  // Truncate LAST so earlier rewrites (e.g. naked URL -> markdown link) cannot
+  // push the result back over the cap and cause a re-check drop.
+  if (out.length > MAX_BUBBLE_LENGTH) {
+    const slice = out.slice(0, MAX_BUBBLE_LENGTH - 1);
+    const lastSpace = slice.lastIndexOf(" ");
+    out = `${(lastSpace > MAX_BUBBLE_LENGTH * 0.6 ? slice.slice(0, lastSpace) : slice).trimEnd()}…`;
   }
   return out;
 }
