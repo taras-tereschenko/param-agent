@@ -46,6 +46,18 @@ describe("setup file generation", () => {
     expect(serializeEnvValue("no-dollar-here")).toBe('"no-dollar-here"');
   });
 
+  it("does not leave a spurious backslash on a trailing $", () => {
+    // Bun keeps the backslash of a `\$` right before the closing quote, so a
+    // trailing `$` must stay unescaped (it has nothing to expand). Only the
+    // final $ of a run is unescaped; earlier ones stay escaped.
+    expect(serializeEnvValue("abc$")).toBe('"abc$"');
+    expect(serializeEnvValue("$")).toBe('"$"');
+    expect(serializeEnvValue("ab$$")).toBe('"ab\\$$"');
+    expect(serializeEnvValue("mid$dle$end$")).toBe('"mid\\$dle\\$end$"');
+    // A value ending in $ round-trips, so the predicate must accept it.
+    expect(envValueRoundTrips("abc$")).toBe(true);
+  });
+
   it("flags values that would not survive the .env round-trip", () => {
     // $ is handled by serializeEnvValue, so it round-trips.
     expect(envValueRoundTrips("p4ss$word-${X}")).toBe(true);

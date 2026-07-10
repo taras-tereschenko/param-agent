@@ -148,14 +148,21 @@ export function serializeEnvValue(value: string) {
   // substitution / backtick expansion, so `$(...)`/backticks are inert once the
   // leading `$` is escaped).
   //
-  // Bun's double-quote parser is NOT JSON-compatible: it un-escapes only
-  // \n / \r / \$ and leaves \" and \\ (and \t etc.) literal. So a value with a
-  // raw `"`, `\`, or control char would NOT read back byte-for-byte. That is
-  // fine for the numeric owner id and the regex-restricted bot token, which
-  // cannot contain those. DATABASE_URL is not guaranteed percent-encoded, so
-  // callers gate it with `envValueRoundTrips` and reject un-round-trippable
+  // One quirk: Bun keeps the backslash of a `\$` that sits at the very end of
+  // the value (right before the closing quote) — `"abc\$"` reads back as
+  // `abc\$`. A trailing `$` needs no escaping there (nothing follows it to
+  // expand), so we un-escape that single trailing `\$` back to `$`.
+  //
+  // Bun's double-quote parser is otherwise NOT JSON-compatible: it un-escapes
+  // only \n / \r / \$ and leaves \" and \\ (and \t etc.) literal. So a value
+  // with a raw `"`, `\`, or control char would NOT read back byte-for-byte.
+  // That is fine for the numeric owner id and the regex-restricted bot token,
+  // which cannot contain those. DATABASE_URL is not guaranteed percent-encoded,
+  // so callers gate it with `envValueRoundTrips` and reject un-round-trippable
   // input up front (see scripts/setup.ts) rather than let it mangle silently.
-  return JSON.stringify(value).replace(/\$/g, "\\$");
+  return JSON.stringify(value)
+    .replace(/\$/g, "\\$")
+    .replace(/\\\$"$/, () => '$"');
 }
 
 // True iff `value` survives serializeEnvValue -> Bun dotenv byte-for-byte.
