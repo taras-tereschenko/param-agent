@@ -80,15 +80,24 @@ export function buildDefaultToolset(): {
  * consequential tool call passes Param Action Review here; nothing executes a
  * consequential action without auto-review clearance or a trusted approval.
  */
+export type DispatchResult = {
+  /** A tool actually executed and produced a result this turn (so the actor
+   *  should be re-woken to see it and continue — the agentic loop). */
+  ranTool: boolean;
+};
+
 export async function dispatchOutputs(
   deps: DispatchDeps,
   ctx: DispatchContext,
   drafts: ActorOutputDraft[],
-): Promise<void> {
+): Promise<DispatchResult> {
+  let ranTool = false;
   for (const draft of drafts) {
     switch (draft.type) {
       case "tool_call":
-        await dispatchToolCall(deps, ctx, draft.payload);
+        if (await dispatchToolCall(deps, ctx, draft.payload)) {
+          ranTool = true;
+        }
         break;
       case "approval_request":
         await dispatchApprovalRequest(deps, ctx, draft.payload);
@@ -103,6 +112,7 @@ export async function dispatchOutputs(
         break; // message/react/no_reply/render_ui/run_summary/done handled elsewhere
     }
   }
+  return { ranTool };
 }
 
 function requesterTrusted(
@@ -129,14 +139,14 @@ async function dispatchToolCall(
   deps: DispatchDeps,
   ctx: DispatchContext,
   payload: Extract<ActorOutputDraft, { type: "tool_call" }>["payload"],
-): Promise<void> {
+): Promise<boolean> {
   const def = deps.toolRegistry.get(payload.toolName);
   if (!def) {
     await emitToolResult(deps, ctx, payload.toolCallId, payload.toolName, {
       status: "failed",
       error: { code: "unknown_tool", message: `no such tool: ${payload.toolName}` },
     });
-    return;
+    return false;
   }
 
   const classification = classifyRisk({
@@ -159,7 +169,7 @@ async function dispatchToolCall(
 
   if (decision.decision === "auto_allowed") {
     await executeTool(deps, ctx, def, payload);
-    return;
+    return true;
   }
 
   if (decision.decision === "needs_approval") {
@@ -189,7 +199,7 @@ async function dispatchToolCall(
       status: "blocked",
       error: { code: "awaiting_approval", message: decision.reason },
     });
-    return;
+    return false;
   }
 
   // denied / not_applicable
@@ -197,6 +207,7 @@ async function dispatchToolCall(
     status: "blocked",
     error: { code: "denied", message: decision.reason },
   });
+  return false;
 }
 
 async function executeTool(

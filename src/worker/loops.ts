@@ -261,6 +261,32 @@ async function executeApprovedAction(
     source: { kind: "tool", toolName },
     payload: result as unknown as Record<string, unknown>,
   });
+  // Close the loop: re-wake the actor so it reports the approved tool's result.
+  await wakeActorForResult(deps, sessionId);
+}
+
+/**
+ * Re-wake the Session Actor after an internal result (approved tool, task
+ * result) so it can observe the outcome and continue. Skips if a run is already
+ * active for the session (that run will pick up the new event).
+ */
+async function wakeActorForResult(
+  deps: WorkerDeps,
+  sessionId: string,
+): Promise<void> {
+  const active = await runsRepository.findActiveRunForSession(
+    deps.db,
+    sessionId,
+  );
+  if (active) {
+    return;
+  }
+  await startActorRun(deps.db, {
+    sessionId,
+    runType: "normal_chat",
+    runtime: deps.config.actor.defaultRuntime,
+    dueAt: new Date(Date.now() + 500),
+  });
 }
 
 /** Claim and run a single due job. Returns whether a job was processed. */
@@ -355,6 +381,8 @@ async function dispatchJob(
             },
           },
         }).catch(() => undefined);
+        // Wake the parent so the actor can report the task outcome to the user.
+        await wakeActorForResult(deps, parentSessionId);
       }
       return;
     }

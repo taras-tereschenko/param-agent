@@ -12,6 +12,7 @@ import {
 import { retrieveMemories } from "../memory/retrieve";
 import { buildMemoryContextText } from "../memory/review";
 import { ingestInternalEvent } from "../orchestrator/router";
+import { startActorRun } from "../orchestrator/run-queue";
 import { idempotencyKeys, newId, nowIso } from "../contracts/ids";
 import type { ActorOutputDraft } from "../contracts/actor-output";
 import type { ActorRef } from "../contracts/common";
@@ -48,8 +49,11 @@ export type ActorInvocationDeps = {
   dispatchOutputs?: (
     ctx: DispatchContext,
     drafts: ActorOutputDraft[],
-  ) => Promise<void>;
+  ) => Promise<{ ranTool: boolean }>;
 };
+
+/** Max tool->result->actor re-wakes in one chain, so the agentic loop can't run away. */
+const MAX_TOOL_CONTINUATIONS = 4;
 
 export type ActorInvocationResult = {
   ran: boolean;
@@ -293,6 +297,7 @@ export async function runActorInvocation(
 
     // Route non-visible outputs (tool_call / approval_request / spawn /
     // memory_candidate) through their safety pipelines.
+    let dispatchResult: { ranTool: boolean } | undefined;
     if (deps.dispatchOutputs) {
       // SECURITY: the requester for the Action Review trust decision must be
       // the user who triggered THIS run, not the latest speaker (in a group,
@@ -302,7 +307,7 @@ export async function runActorInvocation(
       const triggerEvent = run.triggerEventId
         ? events.find((event) => event.id === run.triggerEventId)
         : undefined;
-      await deps.dispatchOutputs(
+      dispatchResult = await deps.dispatchOutputs(
         {
           runId: run.id,
           sessionId: run.sessionId,
@@ -326,6 +331,29 @@ export async function runActorInvocation(
 
     await runsRepository.markRunStatus(db, run.id, "completed");
     await sessionsRepository.setActiveRun(db, run.sessionId, null);
+
+    // Agentic loop: a tool executed this turn -> re-wake the actor so it sees
+    // the tool.result and can continue (reply, or chain another step). Bounded
+    // by MAX_TOOL_CONTINUATIONS so a tool loop can't run away.
+    const continuationDepth = Number(
+      (run as { metadata?: Record<string, unknown> }).metadata
+        ?.continuationDepth ?? 0,
+    );
+    if (
+      dispatchResult &&
+      dispatchResult.ranTool &&
+      continuationDepth < MAX_TOOL_CONTINUATIONS
+    ) {
+      await startActorRun(db, {
+        sessionId: run.sessionId,
+        runType: "normal_chat",
+        runtime: deps.config.actor.defaultRuntime,
+        triggerEventId: run.triggerEventId,
+        metadata: { continuationDepth: continuationDepth + 1 },
+        dueAt: new Date(Date.now() + 500),
+      });
+    }
+
     if (ctx.latest?.latestEventId) {
       await sessionsRepository.setLastEventSeenByActor(
         db,
