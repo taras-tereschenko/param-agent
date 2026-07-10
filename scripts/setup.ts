@@ -208,6 +208,15 @@ async function collectAnswers(): Promise<SetupAnswers> {
     }),
   ).trim();
 
+  // Tailscale is installed by default; an auth key joins the tailnet
+  // automatically so you get private access to the box without exposing a port.
+  const tailscaleAuthKey = stopIfCancel(
+    await password({
+      message: "Tailscale auth key for private access (blank to set up later)",
+      mask: "*",
+    }),
+  ).trim();
+
   const runtimes = toRuntimeChoices(
     stopIfCancel(
       await multiselect<string>({
@@ -239,6 +248,7 @@ async function collectAnswers(): Promise<SetupAnswers> {
     telegramBotToken,
     databaseUrl,
     openaiApiKey,
+    tailscaleAuthKey,
     runtimes,
   };
 }

@@ -22,6 +22,7 @@ const answers: SetupAnswers = {
   telegramBotToken: "123456:secret_token",
   databaseUrl: "postgresql://param:secret@127.0.0.1:5432/param",
   openaiApiKey: "sk-test-key",
+  tailscaleAuthKey: "tskey-test",
   runtimes: ["codex", "antigravity"],
 };
 

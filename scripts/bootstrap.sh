@@ -252,6 +252,28 @@ if ! command -v codex >/dev/null 2>&1; then
     || warn "could not auto-install Codex; the OpenAI API brain (OPENAI_API_KEY) does not need it"
 fi
 
+# 8b. Tailscale (installed by default) for private access to the box. The app
+#     endpoints stay bound to loopback; reach them over the tailnet (SSH in over
+#     Tailscale, then curl localhost). Bringing it up needs an auth key.
+if [ "$OS" = "Linux" ]; then
+  if ! command -v tailscale >/dev/null 2>&1; then
+    log "installing Tailscale"
+    curl -fsSL https://tailscale.com/install.sh | sh >/dev/null 2>&1 \
+      || warn "could not auto-install Tailscale (see https://tailscale.com/download)"
+  fi
+  if command -v tailscale >/dev/null 2>&1 && [ -f .env ]; then
+    TS_KEY="$(bun -e 'process.stdout.write((process.env.TAILSCALE_AUTH_KEY||"").trim())')"
+    if [ -n "$TS_KEY" ]; then
+      log "connecting to your tailnet"
+      $SUDO tailscale up --authkey="$TS_KEY" --hostname=param-agent >/dev/null 2>&1 \
+        || warn "tailscale up failed; run 'sudo tailscale up' manually"
+    else
+      warn "Tailscale installed; no TAILSCALE_AUTH_KEY set — connect later with 'sudo tailscale up'"
+    fi
+    unset TS_KEY
+  fi
+fi
+
 # 9. Start Param as a background service (systemd) so it runs now and on boot.
 #    The worker refuses to run the fake actor in production, so we only START it
 #    once a real brain is configured (OPENAI_API_KEY in .env, or codex present).
@@ -280,6 +302,10 @@ Environment=PATH=$SVC_PATH
 ExecStart=$BUN_BIN run start:worker
 Restart=on-failure
 RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
 
 [Install]
 WantedBy=multi-user.target
@@ -299,6 +325,10 @@ Environment=PORT=8080
 ExecStart=$BUN_BIN run start
 Restart=on-failure
 RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
 
 [Install]
 WantedBy=multi-user.target
