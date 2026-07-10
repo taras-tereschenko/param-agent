@@ -49,7 +49,7 @@ One-shot bootstrap on a fresh host (installs deps + bun, clones, installs local
 Postgres+pgvector, runs the config questions, migrates — see `docs/DEPLOY_VPS.md`):
 
 ```text
-curl -fsSL https://raw.githubusercontent.com/taras-tereschenko/param-agent/feat/param-implementation/scripts/bootstrap.sh | bash -s -- --with-postgres
+curl -fsSL https://raw.githubusercontent.com/taras-tereschenko/param-agent/feat/param-implementation/scripts/bootstrap.sh | bash
 ```
 
 Or the individual scripts:

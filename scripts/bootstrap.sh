@@ -5,12 +5,12 @@
 #   curl -fsSL https://raw.githubusercontent.com/taras-tereschenko/param-agent/feat/param-implementation/scripts/bootstrap.sh | bash
 #
 # Checks/installs prerequisites (curl, git, unzip, bun), clones Param, installs
-# dependencies, and runs the interactive setup (config questions). With
-# --with-postgres it also installs local Postgres + pgvector, provisions the DB
-# from .env, and runs migrations. Idempotent: safe to re-run.
+# dependencies, and runs the interactive setup (config questions). By default it
+# also installs local Postgres + pgvector, provisions the DB from .env, and runs
+# migrations. Idempotent: safe to re-run.
 #
 # Flags:
-#   --with-postgres   also install local Postgres + pgvector, provision + migrate
+#   --skip-postgres   do NOT install local Postgres (bring your own / remote DB)
 #   --no-setup        skip the interactive `bun run setup`
 #   --repo <url>      git repo (default: the public Param repo)
 #   --branch <name>   branch (default: feat/param-implementation)
@@ -20,7 +20,7 @@ set -euo pipefail
 REPO_URL="${PARAM_REPO_URL:-https://github.com/taras-tereschenko/param-agent.git}"
 BRANCH="${PARAM_BRANCH:-feat/param-implementation}"
 TARGET_DIR="${PARAM_DIR:-$HOME/param-agent}"
-WITH_POSTGRES=0
+WITH_POSTGRES=1   # install local Postgres by default; --skip-postgres opts out
 RUN_SETUP=1
 PROVISION_DB=0   # set to 1 only when auto DB provisioning is supported here
 DB_READY=0       # set to 1 only after the DB is actually provisioned + migrated
@@ -32,12 +32,12 @@ usage() {
   cat <<'USAGE'
 Param one-shot bootstrap.
 Installs prerequisites (curl, git, unzip, bun), clones Param, installs deps,
-and runs the interactive setup. With --with-postgres it also installs local
-Postgres + pgvector (apt-based Linux only), provisions the DB from .env, and
-migrates. Idempotent.
+and runs the interactive setup. By default it also installs local Postgres +
+pgvector (apt-based Linux only), provisions the DB from .env, and migrates.
+Idempotent.
 
 Flags:
-  --with-postgres   also install + provision local Postgres (apt-based Linux)
+  --skip-postgres   do NOT install local Postgres (bring your own / remote DB)
   --no-setup        skip the interactive `bun run setup`
   --repo <url>      git repo (default: the public Param repo)
   --branch <name>   branch (default: feat/param-implementation)
@@ -48,7 +48,8 @@ USAGE
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --with-postgres) WITH_POSTGRES=1 ;;
+    --skip-postgres) WITH_POSTGRES=0 ;;
+    --with-postgres) WITH_POSTGRES=1 ;;  # accepted for back-compat (now default)
     --no-setup) RUN_SETUP=0 ;;
     --repo) [ $# -ge 2 ] || die "--repo requires a value"; REPO_URL="$2"; shift ;;
     --branch) [ $# -ge 2 ] || die "--branch requires a value"; BRANCH="$2"; shift ;;
