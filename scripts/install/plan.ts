@@ -43,15 +43,22 @@ export function runtimeSteps(
   runtimes: RuntimeChoice[],
   installCmd: (pkg: string) => string,
 ): HostStep[] {
-  const map: Record<RuntimeChoice, string> = {
+  // Global-package name for runtimes that install that way.
+  const pkg: Record<RuntimeChoice, string> = {
     codex: "@openai/codex",
     opencode: "opencode-ai",
     antigravity: "antigravity",
   };
+  // Codex's official install is a standalone script (Rust binary, no Node),
+  // preferred over the npm package. macOS/Linux use install.sh; the npm package
+  // remains a fallback. (Windows uses install.ps1 — verify per host.)
+  const officialCommand: Partial<Record<RuntimeChoice, string>> = {
+    codex: "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
+  };
   return runtimes.map((runtime) => ({
     id: `runtime:${runtime}`,
     description: `install/check ${runtime} CLI (verify current official install command)`,
-    command: installCmd(map[runtime]),
+    command: officialCommand[runtime] ?? installCmd(pkg[runtime]),
     mutating: true,
     privileged: false,
   }));

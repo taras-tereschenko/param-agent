@@ -141,6 +141,17 @@ bun install
 if [ "$WITH_POSTGRES" -eq 1 ]; then
   if [ "$OS" = "Linux" ] && command -v apt-get >/dev/null 2>&1; then
     log "installing Postgres + pgvector"
+    # Prefer PostgreSQL's official PGDG apt repo: it ships a current server AND
+    # the matching postgresql-<v>-pgvector package (the distro repos frequently
+    # lack pgvector). Best-effort with `-y` (non-interactive) — if the repo
+    # setup fails we fall back to the distro packages, and the pgvector guard in
+    # step 7 still fails loudly if the extension is ultimately unavailable.
+    if pkg_install postgresql-common \
+      && $SUDO /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null 2>&1; then
+      log "added the PostgreSQL PGDG apt repository"
+    else
+      warn "could not add the PGDG repo; falling back to the distro Postgres packages"
+    fi
     pkg_install postgresql postgresql-contrib
     PGV="$(psql --version | grep -oE '[0-9]+' | head -1)"
     pkg_install "postgresql-${PGV}-pgvector" \

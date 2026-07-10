@@ -45,8 +45,13 @@ bun --version
 
 ## 3. Postgres + pgvector
 ```bash
+# Add PostgreSQL's official PGDG apt repo (current server + the pgvector
+# package; the distro repos frequently lack pgvector). `-y` = non-interactive.
+sudo apt-get install -y postgresql-common
+sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+
 sudo apt-get install -y postgresql postgresql-contrib
-# pgvector package name matches the server major version (e.g. 16):
+# pgvector package name matches the server major version (e.g. 18):
 PGV=$(psql -V | grep -oE '[0-9]+' | head -1)
 sudo apt-get install -y "postgresql-${PGV}-pgvector"
 sudo systemctl enable --now postgresql
@@ -61,13 +66,15 @@ SQL
 
 ## 4. Codex CLI (the chat brain) + auth
 ```bash
-# Install per the current official docs; commonly:
-bun add -g @openai/codex        # or: npm i -g @openai/codex
+# Official install script (standalone Rust binary, no Node.js needed):
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
 codex --version
-codex login                     # subscription/ChatGPT sign-in (interactive, once)
+codex login                     # or run `codex` and choose "Sign in with ChatGPT"
 # Confirm a headless run works and note the exact flags for your version:
 echo "say hi in one word" | codex exec
 ```
+> npm (`npm i -g @openai/codex`, needs Node 22+) is a fallback if the script
+> is unavailable.
 > If `codex exec` reads the prompt as an ARG rather than stdin, or uses
 > different flags, set `runtimes.codex.args` accordingly in Step 6.
 
