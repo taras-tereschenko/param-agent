@@ -120,10 +120,14 @@ async function collectAnswers(): Promise<SetupAnswers> {
     }),
   ).trim();
 
+  // Masked: the URL embeds the DB password, so it must not render in cleartext
+  // (screen, scrollback, or anything reading the terminal). The example shape
+  // lives in the message rather than an editable, visible initialValue.
   const databaseUrl = stopIfCancel(
-    await text({
-      message: "Database URL",
-      initialValue: "postgresql://param:replace_me@127.0.0.1:5432/param",
+    await password({
+      message:
+        "Database URL (hidden; e.g. postgresql://param:PASSWORD@127.0.0.1:5432/param)",
+      mask: "•",
       validate: validateDatabaseUrl,
     }),
   ).trim();
