@@ -8,15 +8,17 @@ import {
   note,
   outro,
   password,
+  select,
   spinner,
   text,
 } from "@clack/prompts";
 
 import {
+  buildDatabaseUrl,
   buildEnvFile,
   buildLocalConfigFile,
   detectHostPlatform,
-  envValueRoundTrips,
+  generateDbPassword,
   isRuntimeChoice,
   runtimeChoices,
   runtimeLabel,
@@ -52,26 +54,59 @@ function validateTelegramBotToken(value: string | undefined) {
   return undefined;
 }
 
-function validateDatabaseUrl(value: string | undefined) {
+function validateRequired(label: string) {
+  return (value: string | undefined) =>
+    value && value.trim().length ? undefined : `${label} is required`;
+}
+
+// Empty is OK (a default applies); a non-empty value must be a valid port.
+function validateOptionalPort(value: string | undefined) {
   const input = value?.trim() ?? "";
-  if (!input) return "DATABASE_URL is required";
-  try {
-    const url = new URL(input);
-    if (!["postgres:", "postgresql:"].includes(url.protocol)) {
-      return "DATABASE_URL must be a Postgres URL";
-    }
-  } catch {
-    return "DATABASE_URL must be a valid URL";
+  if (!input) return undefined;
+  const port = Number(input);
+  if (!/^\d+$/.test(input) || port < 1 || port > 65535) {
+    return "port must be a number between 1 and 65535";
   }
-
-  // A raw `"` or `\` (or control char) in the URL — almost always an
-  // un-encoded password — would not survive the .env round-trip and silently
-  // corrupt the stored DATABASE_URL. Reject it now with a clear fix.
-  if (!envValueRoundTrips(input)) {
-    return 'percent-encode special characters in the password (e.g. " as %22, \\ as %5C)';
-  }
-
   return undefined;
+}
+
+// Bring-your-own database: collect the connection details as visible fields
+// (host/port/name/user) plus a masked password, then assemble the URL — so the
+// user never types a full URL blind or has to percent-encode anything.
+async function collectExternalDatabaseUrl(): Promise<string> {
+  const host = (
+    stopIfCancel(
+      await text({ message: "Database host", placeholder: "127.0.0.1" }),
+    ) || "127.0.0.1"
+  ).trim();
+  const port = (
+    stopIfCancel(
+      await text({
+        message: "Database port",
+        placeholder: "5432",
+        validate: validateOptionalPort,
+      }),
+    ) || "5432"
+  ).trim();
+  const database = (
+    stopIfCancel(
+      await text({ message: "Database name", placeholder: "param" }),
+    ) || "param"
+  ).trim();
+  const user = (
+    stopIfCancel(
+      await text({ message: "Database user", placeholder: "param" }),
+    ) || "param"
+  ).trim();
+  const dbPassword = stopIfCancel(
+    await password({
+      message: "Database password",
+      mask: "•",
+      validate: validateRequired("database password"),
+    }),
+  );
+
+  return buildDatabaseUrl(dbPassword, { host, port, database, user });
 }
 
 function toRuntimeChoices(values: string[]) {
@@ -128,17 +163,39 @@ async function collectAnswers(): Promise<SetupAnswers> {
     }),
   ).trim();
 
-  // Masked: the URL embeds the DB password, so it must not render in cleartext
-  // (screen, scrollback, or anything reading the terminal). The example shape
-  // lives in the message rather than an editable, visible initialValue.
-  const databaseUrl = stopIfCancel(
-    await password({
-      message:
-        "Database URL (hidden; e.g. postgresql://param:PASSWORD@127.0.0.1:5432/param)",
-      mask: "•",
-      validate: validateDatabaseUrl,
-    }),
-  ).trim();
+  // Database: local (we generate a strong password — no prompt) vs external
+  // (bring your own — ask for connection details). The bootstrap sets
+  // PARAM_SETUP_DB_MODE; a standalone `bun run setup` asks.
+  const dbMode =
+    process.env.PARAM_SETUP_DB_MODE === "external"
+      ? "external"
+      : process.env.PARAM_SETUP_DB_MODE === "local"
+        ? "local"
+        : stopIfCancel(
+            await select({
+              message: "Database",
+              initialValue: "local",
+              options: [
+                {
+                  value: "local",
+                  label:
+                    "Set up a local Postgres for me (auto-generate the password)",
+                },
+                {
+                  value: "external",
+                  label: "Use an existing database (enter connection details)",
+                },
+              ],
+            }),
+          );
+
+  let databaseUrl: string;
+  if (dbMode === "external") {
+    databaseUrl = await collectExternalDatabaseUrl();
+  } else {
+    databaseUrl = buildDatabaseUrl(generateDbPassword());
+    log.info("Local Postgres: generated a strong password (saved in .env).");
+  }
 
   const runtimes = toRuntimeChoices(
     stopIfCancel(

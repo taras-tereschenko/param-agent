@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { chmod, open } from "node:fs/promises";
 import { posix, win32 } from "node:path";
 
@@ -180,6 +181,31 @@ export function envValueRoundTrips(value: string) {
     if (ch.length === 1 && code >= 0xd800 && code <= 0xdfff) return false;
   }
   return true;
+}
+
+// A strong random password for the auto-provisioned local database. base64url
+// (A-Za-z0-9-_) is URL-safe, so it needs no percent-encoding and round-trips
+// through .env cleanly; 24 bytes ~= 192 bits of entropy.
+export function generateDbPassword() {
+  return randomBytes(24).toString("base64url");
+}
+
+// Assemble a Postgres URL, percent-encoding the userinfo so any password
+// character is stored safely (the caller never has to encode by hand).
+export function buildDatabaseUrl(
+  password: string,
+  opts: {
+    user?: string;
+    host?: string;
+    port?: string | number;
+    database?: string;
+  } = {},
+) {
+  const user = opts.user ?? "param";
+  const host = opts.host ?? "127.0.0.1";
+  const port = opts.port ?? 5432;
+  const database = opts.database ?? "param";
+  return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
 }
 
 export function buildLocalConfigFile(answers: Pick<SetupAnswers, "runtimes">) {

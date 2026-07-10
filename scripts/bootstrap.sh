@@ -174,6 +174,15 @@ fi
 #    this guard a piped run whose output is redirected to a file would abort the
 #    whole bootstrap. Falls back to a clear message when there is no usable
 #    terminal (e.g. CI, or output redirected to a file).
+#
+# Tell setup whether we're provisioning a local DB (it generates the password
+# and never prompts) or the user brings their own (it asks for connection
+# details). PROVISION_DB is 1 only when a local Postgres will actually be set up.
+if [ "$PROVISION_DB" -eq 1 ]; then
+  export PARAM_SETUP_DB_MODE=local
+else
+  export PARAM_SETUP_DB_MODE=external
+fi
 if [ "$RUN_SETUP" -eq 1 ]; then
   if [ -t 0 ] && [ -t 1 ]; then
     log "running setup (configuration questions)"

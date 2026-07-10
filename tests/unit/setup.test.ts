@@ -4,11 +4,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 
 import {
+  buildDatabaseUrl,
   buildEnvFile,
   buildLocalConfigFile,
   defaultHostPaths,
   detectHostPlatform,
   envValueRoundTrips,
+  generateDbPassword,
   pickDefaultRuntime,
   serializeEnvValue,
   type SetupAnswers,
@@ -109,6 +111,35 @@ describe("setup file generation", () => {
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
+  });
+
+  it("generates a strong URL-safe local DB password", () => {
+    const pw = generateDbPassword();
+    expect(pw.length).toBeGreaterThanOrEqual(24);
+    // base64url: nothing that needs percent-encoding or breaks the .env round-trip
+    expect(pw).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(generateDbPassword()).not.toBe(pw);
+    expect(envValueRoundTrips(pw)).toBe(true);
+  });
+
+  it("builds a Postgres URL with a percent-encoded password", () => {
+    expect(buildDatabaseUrl("secret")).toBe(
+      "postgresql://param:secret@127.0.0.1:5432/param",
+    );
+
+    const url = buildDatabaseUrl('p@ss:w/rd$"', {
+      host: "db.example.com",
+      port: 6543,
+      database: "app",
+      user: "svc",
+    });
+    const parsed = new URL(url);
+    expect(parsed.hostname).toBe("db.example.com");
+    expect(parsed.port).toBe("6543");
+    expect(parsed.pathname).toBe("/app");
+    // special chars encoded so the URL parses, decodes back, and round-trips
+    expect(decodeURIComponent(parsed.password)).toBe('p@ss:w/rd$"');
+    expect(envValueRoundTrips(url)).toBe(true);
   });
 
   it("keeps secrets out of local config content", () => {
