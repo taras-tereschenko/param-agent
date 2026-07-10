@@ -7,6 +7,8 @@ export type HostStep = {
   command?: string;
   mutating: boolean;
   privileged?: boolean;
+  /** Requires an interactive TTY (e.g. `bun run setup`); never auto-run. */
+  interactive?: boolean;
 };
 
 export type HostPlan = {
@@ -56,20 +58,19 @@ export function runtimeSteps(
 }
 
 export function configSteps(options: InstallOptions): HostStep[] {
+  // Config creation is owned by the interactive `bun run setup` (it prompts for
+  // the owner Telegram id + bot token and never overwrites existing files).
   const steps: HostStep[] = [
     {
-      id: "config:env",
-      description: "create .env from .env.example if missing (never overwrite)",
+      id: "config:setup",
+      description:
+        "run `bun run setup` (interactive) to create .env + param.config.local.ts if missing (never overwrites)",
+      command: "bun run setup",
       mutating: true,
+      interactive: true,
     },
   ];
-  if (options.createLocalConfig) {
-    steps.push({
-      id: "config:local",
-      description: "create param.config.local.ts if missing (never overwrite)",
-      mutating: true,
-    });
-  }
+  void options;
   return steps;
 }
 

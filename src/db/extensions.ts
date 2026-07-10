@@ -70,6 +70,9 @@ export const extendedDatabaseTables = [
   "config_overrides",
   "decision_records",
   "health_checks",
+  "skill_audits",
+  "trace_refs",
+  "metric_snapshots",
 ] as const;
 
 export type ExtendedDatabaseTable = (typeof extendedDatabaseTables)[number];

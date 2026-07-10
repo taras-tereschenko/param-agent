@@ -66,6 +66,24 @@ export async function findActiveRunForSession(
   return row;
 }
 
+/** Store a redacted prompt/context snapshot reference for audit/debug. */
+export async function setRunSnapshot(
+  db: ParamDb,
+  runId: string,
+  input: { promptSnapshotRef: string; snapshot?: Record<string, unknown> },
+): Promise<void> {
+  await db
+    .update(actorRuns)
+    .set({
+      promptSnapshotRef: input.promptSnapshotRef,
+      metadata: input.snapshot
+        ? ({ promptSnapshot: input.snapshot } as Record<string, unknown>)
+        : undefined,
+      updatedAt: new Date(),
+    })
+    .where(eq(actorRuns.id, runId));
+}
+
 export async function heartbeatRun(
   db: ParamDb,
   runId: string,
@@ -267,6 +285,7 @@ export function isTerminalRunStatus(status: string): boolean {
 export const runsRepository = {
   createActorRun,
   getActorRunById,
+  setRunSnapshot,
   findActiveRunForSession,
   heartbeatRun,
   markRunStatus,

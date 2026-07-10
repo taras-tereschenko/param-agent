@@ -69,6 +69,9 @@ interface, MockActor, validation, style guard, runner), `src/action-review`,
 adapters + placeholders), `src/skills`, `src/scheduler`, `src/ui`,
 `src/task-agents`, `src/ops`, `src/observability`, `src/security`.
 
+`docs/IMPLEMENTATION_STATUS.md` records exactly what is wired end-to-end versus
+staged, so the target-architecture docs never conflict with the code.
+
 ### Session Actor inference
 
 The Codex CLI chat-brain path is a first-class target but is unproven in this

@@ -158,6 +158,23 @@ export async function runActorInvocation(
       knownEventIds: ctx.knownEventIds,
     });
 
+    // Store a redacted prompt snapshot (layer ids/titles/versions only — no
+    // content, so no secrets) for audit and debugging.
+    await runsRepository.setRunSnapshot(db, run.id, {
+      promptSnapshotRef: turn.promptPacket.promptId,
+      snapshot: {
+        runType: run.runType,
+        layers: turn.promptPacket.layers.map((layer) => ({
+          id: layer.id,
+          title: layer.title,
+          verbatim: layer.verbatim,
+        })),
+        allowedOutputs: turn.promptPacket.allowedOutputs,
+        styleGuardVersion: turn.promptPacket.styleGuard.version,
+        provider: turn.provider,
+      },
+    });
+
     // Persist every structured output (visible + internal), capturing the row
     // ids of visible outputs so delivery can be tracked per output.
     const messagesToDeliver: {

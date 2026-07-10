@@ -646,6 +646,62 @@ export const healthChecks = pgTable(
   ],
 );
 
+export const skillAudits = pgTable(
+  "skill_audits",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    skillId: uuid("skill_id")
+      .notNull()
+      .references(() => skills.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    status: text("status").notNull(),
+    riskLevel: text("risk_level"),
+    summary: text("summary"),
+    raw: jsonObject("raw"),
+    auditedAt: timestamptz("audited_at").notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("skill_audits_skill_id_idx").on(table.skillId)],
+);
+
+export const traceRefs = pgTable(
+  "trace_refs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceId: text("trace_id").notNull(),
+    actorRunId: uuid("actor_run_id"),
+    jobId: uuid("job_id"),
+    toolCallId: uuid("tool_call_id"),
+    runtimeCallId: text("runtime_call_id"),
+    exporter: text("exporter"),
+    artifactId: uuid("artifact_id"),
+    metadata: jsonObject("metadata"),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("trace_refs_trace_id_idx").on(table.traceId),
+    index("trace_refs_actor_run_id_idx").on(table.actorRunId),
+  ],
+);
+
+export const metricSnapshots = pgTable(
+  "metric_snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    metricName: text("metric_name").notNull(),
+    labels: jsonObject("labels"),
+    value: numeric("value").notNull(),
+    observedAt: timestamptz("observed_at").notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("metric_snapshots_name_observed_at_idx").on(
+      table.metricName,
+      sql`${table.observedAt} desc`,
+    ),
+  ],
+);
+
 /* -------------------------------------------------------------------------- */
 /* Aggregate + inferred types                                                 */
 /* -------------------------------------------------------------------------- */
@@ -672,6 +728,9 @@ export const extendedSchema = {
   configOverrides,
   decisionRecords,
   healthChecks,
+  skillAudits,
+  traceRefs,
+  metricSnapshots,
 };
 
 export type MemoryRecord = typeof memoryRecords.$inferSelect;

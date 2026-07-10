@@ -41,6 +41,7 @@ Subsystem docs:
 - `UI.md` explains structured UI, callbacks, and Mini Apps.
 - `channels/TELEGRAM.md` is the first concrete channel adapter.
 - `CODEX_CHAT_BRAIN_PROOF.md` records the actor-inference gate result.
+- `IMPLEMENTATION_STATUS.md` records what is wired vs staged vs placeholder.
 - `REFERENCES.md` records source notes and lessons from existing systems.
 
 ## Architecture Map

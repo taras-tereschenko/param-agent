@@ -15,6 +15,13 @@
       "when": 1783628641534,
       "tag": "0001_param_extended",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783674515997,
+      "tag": "0002_param_audit_tables",
+      "breakpoints": true
     }
   ]
 }

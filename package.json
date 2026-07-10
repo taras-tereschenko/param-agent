@@ -19,7 +19,8 @@
     "doctor": "bun scripts/doctor.ts",
     "create-local-config": "bun scripts/create-local-config.ts",
     "host-install": "bun scripts/install.ts",
-    "discover-telegram": "bun scripts/telegram-id-discovery.ts"
+    "discover-telegram": "bun scripts/telegram-id-discovery.ts",
+    "evals": "bun evals/run.ts"
   },
   "dependencies": {
     "@ai-sdk/harness": "^1.0.0-beta.20",

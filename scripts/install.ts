@@ -84,6 +84,9 @@ async function main() {
 
   const plan = planFor(platform, options);
   printPlan(plan);
+  console.log(
+    "Config (.env + param.config.local.ts) is created by `bun run setup` (interactive). Run it before starting services.\n",
+  );
 
   const dryRun = Boolean(values["dry-run"] || values.check);
   if (dryRun) {
@@ -101,7 +104,7 @@ async function main() {
   // Execute only non-privileged app steps that have a command (e.g. migrations,
   // doctor). Privileged package/service/db steps are left to the operator.
   for (const step of plan.steps) {
-    if (!step.command || step.privileged) {
+    if (!step.command || step.privileged || step.interactive) {
       continue;
     }
     if (!step.command.startsWith("bun run")) {
