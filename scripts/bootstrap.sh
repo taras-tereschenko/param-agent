@@ -25,6 +25,7 @@ WITH_POSTGRES=1   # install local Postgres by default; --skip-postgres opts out
 RUN_SETUP=1
 PROVISION_DB=0   # set to 1 only when auto DB provisioning is supported here
 DB_READY=0       # set to 1 only after the DB is actually provisioned + migrated
+SERVICES_UP=0    # set to 1 only after the systemd services are actually started
 
 log()  { printf '\n\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mwarn:\033[0m %s\n' "$*" >&2; }
@@ -243,16 +244,102 @@ SQL
   fi
 fi
 
+# 8. Chat brain: install the Codex CLI (optional — the OpenAI API brain needs no
+#    CLI, only OPENAI_API_KEY). Non-fatal; skip if already present.
+if ! command -v codex >/dev/null 2>&1; then
+  log "installing Codex CLI (optional chat brain)"
+  curl -fsSL https://chatgpt.com/codex/install.sh | sh >/dev/null 2>&1 \
+    || warn "could not auto-install Codex; the OpenAI API brain (OPENAI_API_KEY) does not need it"
+fi
+
+# 9. Start Param as a background service (systemd) so it runs now and on boot.
+#    The worker refuses to run the fake actor in production, so we only START it
+#    once a real brain is configured (OPENAI_API_KEY in .env, or codex present).
+if command -v systemctl >/dev/null 2>&1 && [ -f .env ] \
+  && { [ "$(id -u)" -eq 0 ] || [ -n "$SUDO" ]; }; then
+  log "installing systemd services (param-worker, param-app)"
+  RUN_USER="$(id -un)"
+  BUN_BIN="$BUN_INSTALL/bin/bun"
+  SVC_PATH="$BUN_INSTALL/bin:$HOME/.codex/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
+  HAS_BRAIN=""
+  if bun -e 'process.exit((process.env.OPENAI_API_KEY||"").trim()?0:1)' >/dev/null 2>&1; then
+    HAS_BRAIN=1
+  fi
+  if command -v codex >/dev/null 2>&1; then HAS_BRAIN=1; fi
+
+  $SUDO tee /etc/systemd/system/param-worker.service >/dev/null <<UNIT
+[Unit]
+Description=Param worker
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=$RUN_USER
+WorkingDirectory=$TARGET_DIR
+Environment=PATH=$SVC_PATH
+ExecStart=$BUN_BIN run start:worker
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+  $SUDO tee /etc/systemd/system/param-app.service >/dev/null <<UNIT
+[Unit]
+Description=Param app (health/webhook)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=$RUN_USER
+WorkingDirectory=$TARGET_DIR
+Environment=PATH=$SVC_PATH
+Environment=PORT=8080
+ExecStart=$BUN_BIN run start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+  $SUDO systemctl daemon-reload >/dev/null 2>&1 || true
+  $SUDO systemctl enable param-worker param-app >/dev/null 2>&1 || true
+  if [ -n "$HAS_BRAIN" ]; then
+    if $SUDO systemctl restart param-worker param-app; then
+      SERVICES_UP=1
+      log "Param services started (param-worker + param-app)"
+    else
+      warn "services installed but failed to start; check 'journalctl -u param-worker -e'"
+    fi
+  else
+    warn "no brain configured yet — set OPENAI_API_KEY in $TARGET_DIR/.env (or run 'codex login'), then: ${SUDO:+$SUDO }systemctl start param-worker param-app"
+  fi
+fi
+
 log "Bootstrap complete."
+if [ "$SERVICES_UP" -eq 1 ]; then
+cat <<EOF
+
+Param is up and running as a service. DM your bot on Telegram — it should reply.
+  systemctl status param-worker      # worker: Telegram polling + actor runs
+  journalctl -u param-worker -f      # live logs
+  sudo systemctl restart|stop param-worker param-app
+
+Hardening (dedicated user, Tailscale, firewall): docs/DEPLOY_VPS.md
+EOF
+else
 cat <<EOF
 
 Next steps:
   cd $TARGET_DIR
-$([ "$RUN_SETUP" -eq 0 ] && echo "  bun run setup                 # configure (owner id, bot token, DB url)")
-  # brain: install Codex CLI + 'codex login' (or set OPENAI_API_KEY), OR use the MockActor
+$([ "$RUN_SETUP" -eq 0 ] && echo "  bun run setup                 # configure (owner id, bot token, OpenAI key)")
 $([ "$DB_READY" -eq 0 ] && echo "  bun run db:migrate && bun run db:check   # once Postgres+pgvector is available")
+  # brain: set OPENAI_API_KEY in .env (recommended), or 'codex login'
   bun run start:worker          # polling + jobs + actor runs (foreground to test)
   bun run start                 # Hono app (health endpoints)
 
 Systemd units + hardening: docs/DEPLOY_VPS.md
 EOF
+fi
