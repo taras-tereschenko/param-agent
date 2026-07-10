@@ -34,7 +34,7 @@ foreground from the install dir: `bun run start:worker` (and `bun run start`).
 ## 0. Assumptions
 - You have root/sudo, a Telegram bot token from @BotFather, and your Telegram
   numeric user id (get it after Step 5 with
-  `sudo -u param bash -lc 'cd ~/app && TELEGRAM_BOT_TOKEN=<token> bun run discover-telegram'`,
+  `sudo -u param bash -lc 'export PATH="$HOME/.bun/bin:$PATH"; cd ~/app && TELEGRAM_BOT_TOKEN=<token> bun run discover-telegram'`,
   or just message @userinfobot).
 
 ## 1. System packages
@@ -101,11 +101,12 @@ sudo -u param bash -lc '
 ```
 
 ## 6. Configure + migrate
-Run as `param` via a login shell (`bash -lc`) so its `~/.bun/bin` is on PATH.
+Run as `param`, putting its Bun on PATH explicitly (a non-interactive login
+shell does not reliably source Bun's PATH line on stock Ubuntu, so export it).
 ```bash
-sudo -u param bash -lc 'cd ~/app && bun run setup'   # prompts: owner id, bot token, DATABASE_URL
+sudo -u param bash -lc 'export PATH="$HOME/.bun/bin:$PATH"; cd ~/app && bun run setup'   # prompts: owner id, bot token, DATABASE_URL
 # DATABASE_URL should be: postgresql://param:REPLACE_ME_STRONG@127.0.0.1:5432/param
-sudo -u param bash -lc 'cd ~/app && bun run db:migrate && bun run db:check'
+sudo -u param bash -lc 'export PATH="$HOME/.bun/bin:$PATH"; cd ~/app && bun run db:migrate && bun run db:check'
 ```
 (`db:migrate` creates the `pgcrypto` + `vector` extensions as role `param`. On
 the PGDG stack from Step 3 both are "trusted" so `param` can create them; on an
@@ -121,7 +122,7 @@ Then edit `param.config.local.ts` (created by setup) to:
 ## 7. PROVE the Codex chat-brain (first gate)
 Run the worker in the foreground and DM your bot:
 ```bash
-sudo -u param bash -lc 'cd ~/app && PARAM_LOG_LEVEL=debug bun run start:worker'
+sudo -u param bash -lc 'export PATH="$HOME/.bun/bin:$PATH"; cd ~/app && PARAM_LOG_LEVEL=debug bun run start:worker'
 ```
 (One-liner / single-user install: just `cd ~/param-agent && PARAM_LOG_LEVEL=debug bun run start:worker` — no `sudo -u param`.)
 - Expect a `actor inference resolved { provider: "codex-cli" }` log.

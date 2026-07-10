@@ -613,11 +613,15 @@ Linux systemd example shape:
 [Service]
 User=param
 WorkingDirectory=/opt/param-agent
-EnvironmentFile=/etc/param-agent/.env
 ExecStart=/usr/local/bin/bun run src/app/main.ts
 Restart=on-failure
 RestartSec=5
 ```
+
+Let Bun load `.env` from `WorkingDirectory` rather than adding
+`EnvironmentFile=`: `.env` is in Bun's dotenv format (a `$` in a secret is
+stored escaped), which systemd's own parser reads differently, and Bun does not
+override a value systemd already put in the environment.
 
 `param-worker.service` uses the same shape with:
 
