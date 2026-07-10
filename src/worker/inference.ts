@@ -10,6 +10,33 @@ export type ResolvedInference = {
   note: string;
 };
 
+// codex `exec` is an autonomous agent that runs on the host. Give its
+// subprocess ONLY the variables it needs — never the app's secrets
+// (DATABASE_URL / TELEGRAM_BOT_TOKEN / …) — so a prompt injection routed into
+// the transcript cannot exfiltrate them through the child environment.
+function codexBrainEnv(
+  env: Record<string, string | undefined>,
+): Record<string, string> {
+  const allow = [
+    "PATH",
+    "HOME",
+    "CODEX_HOME",
+    "OPENAI_API_KEY",
+    "XDG_CONFIG_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_DATA_HOME",
+    "TERM",
+    "LANG",
+    "LC_ALL",
+  ];
+  const out: Record<string, string> = {};
+  for (const key of allow) {
+    const value = env[key];
+    if (typeof value === "string" && value.length > 0) out[key] = value;
+  }
+  return out;
+}
+
 /**
  * Resolve the Session Actor inference path (the "brain").
  *
@@ -64,28 +91,32 @@ export async function resolveInference(
   }
 
   // Codex CLI brain: subscription (codex login) or OPENAI_API_KEY, when installed.
-  if (mode === "codex" || mode === "auto") {
-    if (config.actor.defaultRuntime === "codex") {
-      const codexCfg = config.runtimes?.codex;
-      if (codexCfg?.adapter === "ai-sdk-harness") {
-        const harness = new CodexChatBrain();
-        if (await harness.isAvailable()) {
-          return {
-            inference: harness,
-            note: "codex chat-brain via AI SDK harness (sandboxed) selected",
-          };
-        }
-      } else {
-        const cli = new CodexCliActor({
-          command: codexCfg?.command ?? "codex",
-          args: codexCfg?.args ?? ["exec"],
-        });
-        if (await cli.isAvailable()) {
-          return {
-            inference: cli,
-            note: "codex CLI chat-brain (direct-cli) selected; PROVE output reliability on first runs (docs/CODEX_CHAT_BRAIN_PROOF.md)",
-          };
-        }
+  // `codex` forces it regardless of defaultRuntime; `auto` uses it only when
+  // codex is the configured runtime. The subprocess gets a scrubbed env.
+  if (
+    mode === "codex" ||
+    (mode === "auto" && config.actor.defaultRuntime === "codex")
+  ) {
+    const codexCfg = config.runtimes?.codex;
+    if (codexCfg?.adapter === "ai-sdk-harness") {
+      const harness = new CodexChatBrain();
+      if (await harness.isAvailable()) {
+        return {
+          inference: harness,
+          note: "codex chat-brain via AI SDK harness (sandboxed) selected",
+        };
+      }
+    } else {
+      const cli = new CodexCliActor({
+        command: codexCfg?.command ?? "codex",
+        args: codexCfg?.args ?? ["exec"],
+        env: codexBrainEnv(env),
+      });
+      if (await cli.isAvailable()) {
+        return {
+          inference: cli,
+          note: "codex CLI chat-brain (direct-cli, scrubbed env) selected; PROVE output reliability on first runs (docs/CODEX_CHAT_BRAIN_PROOF.md)",
+        };
       }
     }
     if (mode === "codex") {

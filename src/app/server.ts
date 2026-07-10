@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { type Context, Hono, type Next } from "hono";
 
 import { getDb } from "../db/client";
 import { checkSystemHealth } from "../ops/health";
@@ -10,6 +10,22 @@ import { checkSystemHealth } from "../ops/health";
  */
 export function createApp() {
   const app = new Hono();
+
+  // Defense-in-depth for the endpoints that expose internals: when
+  // PARAM_OPERATOR_TOKEN is set, require it as a bearer token. (Primary
+  // protection is loopback binding — see app/main.ts — this guards the case
+  // where the operator deliberately binds to a public/Tailscale interface.)
+  const operatorToken = process.env.PARAM_OPERATOR_TOKEN;
+  const requireOperatorAuth = async (c: Context, next: Next) => {
+    if (operatorToken) {
+      if (c.req.header("authorization") !== `Bearer ${operatorToken}`) {
+        return c.json({ ok: false, error: "unauthorized" }, 401);
+      }
+    }
+    await next();
+  };
+  app.use("/operator/*", requireOperatorAuth);
+  app.use("/health/db", requireOperatorAuth);
 
   app.get("/", (c) => c.text("Param is online"));
 
@@ -35,6 +51,15 @@ export function createApp() {
   // endpoint exists for deployments that prefer webhook mode. It acknowledges
   // fast and relies on the worker for actor work.
   app.post("/webhooks/telegram/:account", async (c) => {
+    // Validate Telegram's secret token before doing anything, so forged updates
+    // are rejected (and so wiring the processing later can't skip this check).
+    const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    if (
+      secret &&
+      c.req.header("x-telegram-bot-api-secret-token") !== secret
+    ) {
+      return c.json({ ok: false, error: "unauthorized" }, 401);
+    }
     await c.req.json().catch(() => ({}));
     return c.json({ ok: true });
   });

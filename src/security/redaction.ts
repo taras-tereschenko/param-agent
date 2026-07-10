@@ -5,12 +5,18 @@ const OPENAI_KEY = /\bsk-[A-Za-z0-9]{8,}\b/g;
 // so this needs its own pattern (LONG_TOKEN alone misses it).
 const TELEGRAM_BOT_TOKEN = /\b\d{6,}:[A-Za-z0-9_-]{20,}\b/g;
 const LONG_TOKEN = /\b[A-Za-z0-9_-]{40,}\b/g;
+// Password in a URL userinfo (postgresql://user:pass@host, redis://…, http
+// basic auth). Auto-generated DB passwords are short and slip past LONG_TOKEN,
+// so mask the userinfo password explicitly, regardless of length. Keeps the
+// scheme + user visible, drops the secret.
+const URL_USERINFO = /([a-z][a-z0-9+.-]*:\/\/[^\s:/@]+):[^\s/@]+@/gi;
 
 const REDACTED = "<redacted>";
 
 /** Mask secret-looking substrings in a string (logs, prompts, artifacts). */
 export function redactString(input: string): string {
   return input
+    .replace(URL_USERINFO, "$1:<redacted>@")
     .replace(BEARER, "bearer <redacted>")
     .replace(TELEGRAM_BOT_TOKEN, REDACTED)
     .replace(OPENAI_KEY, REDACTED)
