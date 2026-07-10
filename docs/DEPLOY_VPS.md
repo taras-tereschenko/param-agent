@@ -8,6 +8,23 @@ Tailscale.
 The Session Actor brain here is your local **Codex CLI** (direct-cli mode). Its
 non-interactive output reliability is the first thing to prove (Step 7).
 
+## Quick start (one-liner)
+
+On a fresh box, this installs prerequisites (curl/git/unzip/bun), clones Param,
+installs deps, installs local Postgres + pgvector, runs the interactive config
+questions, provisions the DB, and migrates:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/taras-tereschenko/param-agent/feat/param-implementation/scripts/bootstrap.sh -o bootstrap.sh
+bash bootstrap.sh --with-postgres
+```
+
+(Download-then-run so the interactive `setup` prompts have a TTY; piping
+straight into `bash` skips the interactive step, which the script detects and
+tells you to run `bun run setup` yourself. Omit `--with-postgres` to skip the
+database install.) After it finishes, wire the brain (Step 4/7 below) and start
+the services (Step 8). The manual steps below are the same thing, broken out.
+
 ## 0. Assumptions
 - You have root/sudo, a Telegram bot token from @BotFather, and your Telegram
   numeric user id (use `bun run discover-telegram` after Step 5, or @userinfobot).

@@ -45,6 +45,15 @@ deterministic orchestrator, an LLM-pluggable Session Actor, Action Review,
 scoped memory, runtime adapters, scheduler, UI renderer, task agents, and
 end-to-end worker wiring.
 
+One-shot bootstrap on a fresh host (installs deps + bun, clones, installs local
+Postgres+pgvector, runs the config questions, migrates — see `docs/DEPLOY_VPS.md`):
+
+```text
+curl -fsSL https://raw.githubusercontent.com/taras-tereschenko/param-agent/feat/param-implementation/scripts/bootstrap.sh -o bootstrap.sh && bash bootstrap.sh --with-postgres
+```
+
+Or the individual scripts:
+
 ```text
 bun install
 bun run setup          # create missing .env + param.config.local.ts, check runtimes
