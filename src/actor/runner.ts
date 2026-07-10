@@ -121,27 +121,31 @@ export async function runActorTurn(
       if (hardInterrupt) {
         continue;
       }
-      const guarded = guardVisibleText(draft.payload.text, {
-        rewriteOnFailure: input.styleGuard.enabled
-          ? input.styleGuard.rewriteOnFailure
-          : false,
-      });
-      if (!guarded.ok) {
-        // Could not make it Param-voiced; drop rather than deliver bad output.
-        styleAdjusted = true;
-        styleDropped += 1;
-        continue;
-      }
-      if (guarded.text !== draft.payload.text) {
-        styleAdjusted = true;
+      let text = draft.payload.text;
+      // Only enforce style when the guard is enabled. When disabled, pass the
+      // message through unchanged — disabling the guard must not DROP messages.
+      if (input.styleGuard.enabled) {
+        const guarded = guardVisibleText(text, {
+          rewriteOnFailure: input.styleGuard.rewriteOnFailure,
+        });
+        if (!guarded.ok) {
+          // Could not make it Param-voiced; drop rather than deliver bad output.
+          styleAdjusted = true;
+          styleDropped += 1;
+          continue;
+        }
+        if (guarded.text !== text) {
+          styleAdjusted = true;
+        }
+        text = guarded.text;
       }
       const fixedDraft: ActorOutputDraft = {
         type: "message",
-        payload: { ...draft.payload, text: guarded.text },
+        payload: { ...draft.payload, text },
       };
       drafts.push(fixedDraft);
       visibleMessages.push({
-        text: guarded.text,
+        text,
         replyToEventId: draft.payload.replyToEventId,
       });
       continue;

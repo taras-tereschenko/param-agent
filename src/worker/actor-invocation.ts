@@ -13,6 +13,7 @@ import { retrieveMemories } from "../memory/retrieve";
 import { buildMemoryContextText } from "../memory/review";
 import { ingestInternalEvent } from "../orchestrator/router";
 import { startActorRun } from "../orchestrator/run-queue";
+import { classifySteering } from "../orchestrator/steering";
 import { idempotencyKeys, newId, nowIso } from "../contracts/ids";
 import type { ActorOutputDraft } from "../contracts/actor-output";
 import type { ActorRef } from "../contracts/common";
@@ -149,6 +150,32 @@ export async function runActorInvocation(
       });
     }
 
+    // Steering: same-session messages that arrived AFTER this run's trigger are
+    // steering signals — a hard control ("stop"/"cancel") interrupts and drops
+    // stale visible output; strong steering forces a pre-send refresh.
+    const triggerAt = run.triggerEventId
+      ? events.find((event) => event.id === run.triggerEventId)?.occurredAt
+      : undefined;
+    const steering: { priority: string; text?: string }[] = [];
+    if (triggerAt) {
+      for (const event of events) {
+        if (event.id === run.triggerEventId) continue;
+        if (event.type !== "chat.message.received") continue;
+        if (!(event.occurredAt > triggerAt)) continue;
+        const payload = event.payload as {
+          text?: string;
+          mechanical?: Record<string, boolean>;
+        };
+        const classification = classifySteering({
+          text: payload.text,
+          mentionsParam: payload.mechanical?.mentionsParam,
+          repliesToParam: payload.mechanical?.repliesToParam,
+          hasCommandLikeText: payload.mechanical?.hasCommandLikeText,
+        });
+        steering.push({ priority: classification.priority, text: payload.text });
+      }
+    }
+
     const turn = await runActorTurn(deps.inference, {
       actorRunId: run.id,
       sessionId: run.sessionId,
@@ -159,6 +186,7 @@ export async function runActorInvocation(
       latest: ctx.latest,
       sessionContextText: ctx.sessionContextText,
       memoryContextText,
+      steering: steering.length > 0 ? steering : undefined,
       knownEventIds: ctx.knownEventIds,
     });
 
@@ -221,6 +249,14 @@ export async function runActorInvocation(
           emoji: draft.payload.emoji,
         });
       }
+    }
+
+    // Strong steering arrived during the turn: the prepared reply is stale — do
+    // not deliver it; the fresh run enqueued below recomputes with the newer
+    // context. (A hard control already dropped visible output in the runner.)
+    if (turn.preSendRefreshRequired) {
+      messagesToDeliver.length = 0;
+      reactionsToDeliver.length = 0;
     }
 
     // Deliver visible messages, tracking delivery status per output.
@@ -331,6 +367,19 @@ export async function runActorInvocation(
 
     await runsRepository.markRunStatus(db, run.id, "completed");
     await sessionsRepository.setActiveRun(db, run.sessionId, null);
+
+    // Pre-send refresh: strong steering means we suppressed this turn's reply;
+    // recompute against the newest message (its own trigger, so this doesn't
+    // loop). startActorRun is a no-op if a run is already active.
+    if (turn.preSendRefreshRequired && ctx.latest?.latestEventId) {
+      await startActorRun(db, {
+        sessionId: run.sessionId,
+        runType: "normal_chat",
+        runtime: deps.config.actor.defaultRuntime,
+        triggerEventId: ctx.latest.latestEventId,
+        dueAt: new Date(Date.now() + 300),
+      });
+    }
 
     // Agentic loop: a tool executed this turn -> re-wake the actor so it sees
     // the tool.result and can continue (reply, or chain another step). Bounded
