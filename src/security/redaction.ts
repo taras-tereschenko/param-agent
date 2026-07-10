@@ -1,6 +1,9 @@
 const SECRET_KEY = /token|secret|key|password|passwd|authorization|cookie|bearer/i;
 const BEARER = /\bbearer\s+[A-Za-z0-9._-]+/gi;
 const OPENAI_KEY = /\bsk-[A-Za-z0-9]{8,}\b/g;
+// Telegram bot token: <digits>:<~35 char secret>. The ':' breaks a \b boundary
+// so this needs its own pattern (LONG_TOKEN alone misses it).
+const TELEGRAM_BOT_TOKEN = /\b\d{6,}:[A-Za-z0-9_-]{20,}\b/g;
 const LONG_TOKEN = /\b[A-Za-z0-9_-]{40,}\b/g;
 
 const REDACTED = "<redacted>";
@@ -9,6 +12,7 @@ const REDACTED = "<redacted>";
 export function redactString(input: string): string {
   return input
     .replace(BEARER, "bearer <redacted>")
+    .replace(TELEGRAM_BOT_TOKEN, REDACTED)
     .replace(OPENAI_KEY, REDACTED)
     .replace(LONG_TOKEN, REDACTED);
 }

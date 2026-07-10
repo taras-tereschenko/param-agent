@@ -60,7 +60,8 @@ export function checkStyle(text: string): StyleViolation[] {
     violations.push({
       code: "too_long",
       message: `message exceeds ${MAX_BUBBLE_LENGTH} chars`,
-      autoFixable: false,
+      // Truncatable rather than dropped: a trimmed reply beats silence.
+      autoFixable: true,
     });
   }
 
@@ -184,6 +185,12 @@ export function passesStyle(text: string): boolean {
  */
 export function applyStyleFixes(text: string): string {
   let out = text;
+  // too long -> truncate at a word boundary near the cap rather than drop.
+  if (out.length > MAX_BUBBLE_LENGTH) {
+    const slice = out.slice(0, MAX_BUBBLE_LENGTH - 1);
+    const lastSpace = slice.lastIndexOf(" ");
+    out = `${(lastSpace > MAX_BUBBLE_LENGTH * 0.6 ? slice.slice(0, lastSpace) : slice).trimEnd()}…`;
+  }
   // em-dash -> comma
   out = out.replace(/\s*—\s*/g, ", ");
   // bold markers

@@ -5,7 +5,11 @@
 export type UrlSafety = { safe: boolean; reason: string };
 
 export function isPrivateHost(hostname: string): boolean {
-  const host = hostname.toLowerCase();
+  let host = hostname.toLowerCase().trim();
+  // Strip IPv6 brackets.
+  if (host.startsWith("[") && host.endsWith("]")) {
+    host = host.slice(1, -1);
+  }
   if (
     host === "localhost" ||
     host.endsWith(".localhost") ||
@@ -14,8 +18,18 @@ export function isPrivateHost(hostname: string): boolean {
   ) {
     return true;
   }
-  // IPv6 loopback / unique-local
+  // IPv6 loopback / unique-local (fc00::/7).
   if (host === "::1" || host.startsWith("fc") || host.startsWith("fd")) {
+    return true;
+  }
+  // IPv4-mapped IPv6 (::ffff:a.b.c.d) -> re-check the embedded IPv4.
+  const mapped = host.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (mapped && mapped[1]) {
+    return isPrivateHost(mapped[1]);
+  }
+  // Non-dotted numeric encodings (decimal / hex / octal) are SSRF-evasion
+  // shapes for a single 32-bit address; block conservatively.
+  if (/^0x[0-9a-f]+$/.test(host) || /^\d{5,}$/.test(host)) {
     return true;
   }
   const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
@@ -28,6 +42,10 @@ export function isPrivateHost(hostname: string): boolean {
     if (a === 169 && b === 254) return true; // link-local (incl. cloud metadata)
     if (a === 172 && b >= 16 && b <= 31) return true;
     if (a === 192 && b === 168) return true;
+  }
+  // Octal-prefixed dotted forms (e.g. 0177.0.0.1).
+  if (/^0\d+\./.test(host)) {
+    return true;
   }
   return false;
 }

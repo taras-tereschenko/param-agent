@@ -1,7 +1,11 @@
 import type { ParamDb } from "../db/client";
 import { approvalsRepository, auditRepository } from "../db/repositories";
 import type { ActorRef } from "../contracts/common";
-import type { ApprovalRequestOutputPayload } from "../contracts/action-review";
+import {
+  trustScopeSchema,
+  type ApprovalRequestOutputPayload,
+} from "../contracts/action-review";
+import { validationError } from "../shared/errors";
 import { computeProposalHash } from "./policy";
 
 export type CreateApprovalRequestInput = {
@@ -28,6 +32,16 @@ export async function createApprovalRequest(
   db: ParamDb,
   input: CreateApprovalRequestInput,
 ): Promise<CreateApprovalRequestResult> {
+  // The approvals table constrains required_trust_scope to the 4 canonical
+  // scopes; reject a non-canonical value here rather than let Postgres 23514.
+  const scope = trustScopeSchema.safeParse(input.requiredTrustScope);
+  if (!scope.success) {
+    throw validationError(
+      `invalid required trust scope: ${input.requiredTrustScope}`,
+      { allowed: ["global", "chat", "project", "server_admin"] },
+    );
+  }
+
   const proposalHash = computeProposalHash(input.request.proposedAction);
 
   const existing = await approvalsRepository.findPendingByHash(

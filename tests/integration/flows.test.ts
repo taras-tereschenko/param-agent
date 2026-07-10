@@ -142,10 +142,21 @@ if (!databaseUrl) {
         expect(reqAgain.existed).toBe(true);
         expect(reqAgain.approvalId).toBe(req.approvalId);
 
+        // An untrusted approver is refused.
+        const untrusted = await resolveApprovalResponse(db, {
+          approvalId: req.approvalId,
+          decision: "approved",
+          approver: { kind: "user", platform: "telegram", platformUserId: "rando" },
+          approverIsTrusted: false,
+          currentProposedAction: proposedAction,
+        });
+        expect(untrusted.status).toBe("not_trusted");
+
         const resolved = await resolveApprovalResponse(db, {
           approvalId: req.approvalId,
           decision: "approved",
           approver: { kind: "user", platform: "telegram", platformUserId: "owner" },
+          approverIsTrusted: true,
           currentProposedAction: proposedAction,
         });
         expect(resolved.status).toBe("approved");
@@ -155,6 +166,7 @@ if (!databaseUrl) {
           approvalId: req.approvalId,
           decision: "approved",
           approver: { kind: "user", platform: "telegram", platformUserId: "owner" },
+          approverIsTrusted: true,
         });
         expect(replay.status).toBe("already_decided");
 

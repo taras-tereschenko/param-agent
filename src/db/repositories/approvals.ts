@@ -81,6 +81,19 @@ export async function decideApproval(
   return row;
 }
 
+/** Pending approvals for a session, newest first (for trusted-reply routing). */
+export async function findPendingForSession(
+  db: ParamDb,
+  sessionId: string,
+): Promise<Approval[]> {
+  return db
+    .select()
+    .from(approvals)
+    .where(
+      and(eq(approvals.sessionId, sessionId), eq(approvals.status, "pending")),
+    );
+}
+
 export async function expireDueApprovals(
   db: ParamDb,
   now: Date = new Date(),
@@ -103,6 +116,7 @@ export const approvalsRepository = {
   createApproval,
   getApprovalById,
   findPendingByHash,
+  findPendingForSession,
   decideApproval,
   expireDueApprovals,
   createApprovalNotification,

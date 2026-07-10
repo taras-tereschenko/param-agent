@@ -20,13 +20,25 @@ export type BuiltSendMessageParams = {
   reply_parameters?: { message_id: number };
 };
 
+/** Telegram rejects sendMessage over 4096 chars with HTTP 400. */
+export const TELEGRAM_MAX_MESSAGE_LENGTH = 4096;
+
+export function truncateForTelegram(text: string): string {
+  if (text.length <= TELEGRAM_MAX_MESSAGE_LENGTH) {
+    return text;
+  }
+  return `${text.slice(0, TELEGRAM_MAX_MESSAGE_LENGTH - 1)}…`;
+}
+
 export function buildSendMessageParams(
   text: string,
   target: SendTarget,
 ): BuiltSendMessageParams {
   const params: BuiltSendMessageParams = {
     chat_id: target.chatId,
-    text,
+    // Safety net: never exceed Telegram's hard limit even if an upstream guard
+    // is bypassed. Normal bubbles are already far shorter.
+    text: truncateForTelegram(text),
   };
   if (target.messageThreadId !== undefined) {
     params.message_thread_id = target.messageThreadId;

@@ -13,8 +13,11 @@ import { retrieveMemories } from "../memory/retrieve";
 import { buildMemoryContextText } from "../memory/review";
 import { ingestInternalEvent } from "../orchestrator/router";
 import { idempotencyKeys, newId, nowIso } from "../contracts/ids";
+import type { ActorOutputDraft } from "../contracts/actor-output";
+import type { ActorRef } from "../contracts/common";
 import type { PromptRunType } from "../contracts/prompt";
 import { logger } from "../observability/logger";
+import type { DispatchContext } from "./dispatch";
 import {
   approvalPolicyFromConfig,
   memoryRetrievalContextFromSession,
@@ -36,6 +39,16 @@ export type ActorInvocationDeps = {
   inference: ActorInference;
   delivery: DeliveryPort;
   config: ParamConfig;
+  workerId?: string;
+  /**
+   * Routes non-visible outputs (tool_call / approval_request / spawn /
+   * memory_candidate) through their safety pipelines. Injected by the worker so
+   * this module stays decoupled from tools/action-review.
+   */
+  dispatchOutputs?: (
+    ctx: DispatchContext,
+    drafts: ActorOutputDraft[],
+  ) => Promise<void>;
 };
 
 export type ActorInvocationResult = {
@@ -88,6 +101,11 @@ export async function runActorInvocation(
   }
 
   await runsRepository.markRunStatus(db, run.id, "running");
+  // Refresh the lease from processing-start so recovery only reclaims a run
+  // whose worker actually died, not one that is legitimately running.
+  if (deps.workerId) {
+    await runsRepository.heartbeatRun(db, run.id, deps.workerId, 300);
+  }
 
   try {
     const events = await eventsRepository.listSessionEvents(db, run.sessionId, 60);
@@ -204,7 +222,7 @@ export async function runActorInvocation(
         await ingestInternalEvent(db, {
           sessionId: run.sessionId,
           eventType: "delivery.succeeded",
-          dedupeKey: `delivery.succeeded:${message.outputId}`,
+          dedupeKey: idempotencyKeys.delivery(message.outputId, "telegram"),
           source: { kind: "param" },
           actorRunId: run.id,
           payload: {
@@ -219,7 +237,7 @@ export async function runActorInvocation(
         await ingestInternalEvent(db, {
           sessionId: run.sessionId,
           eventType: "delivery.failed",
-          dedupeKey: `delivery.failed:${message.outputId}`,
+          dedupeKey: `${idempotencyKeys.delivery(message.outputId, "telegram")}:failed:${newId()}`,
           source: { kind: "param" },
           actorRunId: run.id,
           payload: {
@@ -254,6 +272,34 @@ export async function runActorInvocation(
           });
         }
       }
+    }
+
+    // Route non-visible outputs (tool_call / approval_request / spawn /
+    // memory_candidate) through their safety pipelines.
+    if (deps.dispatchOutputs) {
+      const requesterEvent = [...events]
+        .reverse()
+        .find((event) => event.type === "chat.message.received");
+      await deps.dispatchOutputs(
+        {
+          runId: run.id,
+          sessionId: run.sessionId,
+          routeType: session.routeType,
+          platformChatId: session.platformChatId,
+          messageThreadId: session.messageThreadId ?? undefined,
+          requester: requesterEvent
+            ? (requesterEvent.source as unknown as ActorRef)
+            : undefined,
+          requesterEventIds: requesterEvent ? [requesterEvent.id] : [],
+        },
+        turn.drafts,
+      );
+    }
+    if (turn.styleDropped > 0) {
+      logger.warn("dropped style-failing visible messages", {
+        runId: run.id,
+        count: turn.styleDropped,
+      });
     }
 
     await runsRepository.markRunStatus(db, run.id, "completed");

@@ -70,9 +70,15 @@ export function evaluateTelegramAccess(
         };
       }
 
-      if (inTopic && lists.allowedTopicIds.length > 0) {
-        const match = lists.allowedTopicIds.some(
-          (t) => t.chatId === ctx.chatId && t.topicId === ctx.messageThreadId,
+      // Topic restrictions are PER-CHAT: only gate this chat's topics when at
+      // least one topic entry exists FOR THIS chat. Topic entries for other
+      // chats must not restrict this one.
+      const topicEntriesForChat = lists.allowedTopicIds.filter(
+        (t) => t.chatId === ctx.chatId,
+      );
+      if (inTopic && topicEntriesForChat.length > 0) {
+        const match = topicEntriesForChat.some(
+          (t) => t.topicId === ctx.messageThreadId,
         );
         if (!match) {
           return {

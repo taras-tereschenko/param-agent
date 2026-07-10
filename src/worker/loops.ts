@@ -1,29 +1,53 @@
-import { jobsRepository } from "../db/repositories";
+import {
+  approvalsRepository,
+  jobsRepository,
+  runsRepository,
+} from "../db/repositories";
 import type { NormalizedInbound } from "../channels";
-import { ingestInboundEvent } from "../orchestrator/router";
-import { runsRepository } from "../db/repositories";
+import { ingestInboundEvent, ingestInternalEvent } from "../orchestrator/router";
 import { startActorRun } from "../orchestrator/run-queue";
 import { buildTelegramSessionRoute } from "../orchestrator/session-resolver";
-import type { ActorRef, PlatformRef } from "../contracts/common";
+import { defaultBatchPolicy, isDirectlyAddressed } from "../orchestrator/batching";
+import {
+  isTrustedForScope,
+  type ResolvedTrustedUser,
+} from "../action-review/trusted-users";
+import { resolveApprovalResponse } from "../action-review/approval-response";
+import type { ActorRef, PlatformRef, RawPayloadRef } from "../contracts/common";
+import { idempotencyKeys } from "../contracts/ids";
+import type { TrustScope } from "../contracts/action-review";
 import { logger } from "../observability/logger";
+import { ToolExecutor, type ActionReviewPort } from "../tools/executor";
+import { buildToolResult } from "../tools/result";
 import {
   runActorInvocation,
   type ActorInvocationDeps,
 } from "./actor-invocation";
+import { buildDefaultToolset } from "./dispatch";
 
 export type WorkerDeps = ActorInvocationDeps & {
   workerId: string;
   accountLabel: string;
+  trustedUsers: ResolvedTrustedUser[];
+  toolset: ReturnType<typeof buildDefaultToolset>;
+  /** Answer a Telegram callback query (stops the button spinner). */
+  answerCallback?: (callbackId: string) => Promise<void>;
 };
 
+const APPROVE = /^\/?(approve|approved|yes|yep|ok|okay|do it|confirm|go ahead)\b/i;
+const DENY = /^\/?(deny|denied|no|nope|stop|cancel|reject|abort)\b/i;
+
 /**
- * Handle one normalized inbound Telegram event: persist it (deduped), then
- * start an actor run for the session when none is active. The jobs loop runs
- * the actor asynchronously — one active run per session is enforced by the DB.
+ * Handle one normalized inbound event: persist it (deduped, with raw payload),
+ * handle trusted approval replies, then batch-schedule an actor run. Batching
+ * is implicit: a run is queued with a debounce delay, and messages arriving
+ * while it is queued/active become context for it instead of each starting a
+ * run. One active run per session is enforced by the DB.
  */
 export async function handleInbound(
   deps: WorkerDeps,
   inbound: NormalizedInbound,
+  rawRef?: RawPayloadRef,
 ): Promise<void> {
   const source = inbound.source as ActorRef;
   const platform = inbound.platform as PlatformRef;
@@ -31,8 +55,7 @@ export async function handleInbound(
     accountId: deps.accountLabel,
     chatType: inbound.access.chatType,
     platformChatId: inbound.access.chatId,
-    platformUserId:
-      source.kind === "user" ? source.platformUserId : undefined,
+    platformUserId: source.kind === "user" ? source.platformUserId : undefined,
     messageThreadId: inbound.access.messageThreadId,
   });
 
@@ -47,15 +70,46 @@ export async function handleInbound(
     source,
     platformRef: platform,
     payload: inbound.payload,
+    raw: rawRef,
     route,
     chatType: inbound.access.chatType,
+    chatTitle: inbound.chatTitle,
   });
+
+  // Always answer callback queries so the button spinner clears, even on dupes.
+  if (inbound.kind === "chat.action.callback" && deps.answerCallback) {
+    const callbackId = (inbound.payload as { callbackId?: string }).callbackId;
+    if (callbackId) {
+      await deps.answerCallback(callbackId).catch(() => undefined);
+    }
+  }
 
   if (!result.inserted) {
     return; // duplicate update; nothing to do
   }
 
-  // Only chat messages/callbacks should wake the actor.
+  // Do not wake the actor for archived/blocked sessions.
+  if (result.session.status !== "active") {
+    return;
+  }
+
+  // Trusted approve/deny replies resolve a pending approval instead of waking
+  // the actor normally.
+  if (inbound.kind === "chat.message.received" && source.kind === "user") {
+    const handled = await maybeHandleApprovalReply(deps, {
+      sessionId: result.sessionId,
+      eventId: result.eventId,
+      text: (inbound.payload as { text?: string }).text,
+      requester: source,
+      platform: source.platform,
+      chatId: inbound.access.chatId,
+      topicId: inbound.access.messageThreadId,
+    });
+    if (handled) {
+      return;
+    }
+  }
+
   const wakesActor =
     inbound.kind === "chat.message.received" ||
     inbound.kind === "chat.action.callback";
@@ -68,16 +122,144 @@ export async function handleInbound(
     result.sessionId,
   );
   if (active) {
-    // Same-session activity during an active run becomes steering context; the
-    // active run will observe it via the context builder on its next turn.
+    // Same-session activity during an active/queued run becomes steering
+    // context; the run observes it via the context builder.
     return;
   }
+
+  // Batch: directly-addressed messages flush quickly; ambient chatter waits.
+  const mechanical =
+    inbound.kind === "chat.message.received"
+      ? (inbound.payload as { mechanical?: Record<string, boolean> }).mechanical
+      : undefined;
+  const addressed =
+    inbound.kind === "chat.action.callback" ||
+    isDirectlyAddressed({
+      isDirectMessage: mechanical?.isDirectMessage,
+      mentionsParam: mechanical?.mentionsParam,
+      repliesToParam: mechanical?.repliesToParam,
+      hasCommandLikeText: mechanical?.hasCommandLikeText,
+    });
+  const delayMs = addressed
+    ? defaultBatchPolicy.directDebounceMs
+    : defaultBatchPolicy.ambientDebounceMs;
 
   await startActorRun(deps.db, {
     sessionId: result.sessionId,
     runType: "normal_chat",
     runtime: deps.config.actor.defaultRuntime,
     triggerEventId: result.eventId,
+    dueAt: new Date(Date.now() + delayMs),
+  });
+}
+
+type ApprovalReplyContext = {
+  sessionId: string;
+  eventId: string;
+  text: string | undefined;
+  requester: Extract<ActorRef, { kind: "user" }>;
+  platform: string;
+  chatId: string;
+  topicId?: string;
+};
+
+/**
+ * If a trusted user replies approve/deny, resolve the session's pending
+ * approval and (on approval of a tool_call) execute it. Returns true when the
+ * message was consumed as an approval reply.
+ */
+async function maybeHandleApprovalReply(
+  deps: WorkerDeps,
+  ctx: ApprovalReplyContext,
+): Promise<boolean> {
+  const text = (ctx.text ?? "").trim();
+  const isApprove = APPROVE.test(text);
+  const isDeny = DENY.test(text);
+  if (!isApprove && !isDeny) {
+    return false;
+  }
+  const pending = await approvalsRepository.findPendingForSession(
+    deps.db,
+    ctx.sessionId,
+  );
+  if (pending.length === 0) {
+    return false;
+  }
+  const approval = pending[0]!;
+  const approverIsTrusted = isTrustedForScope(
+    ctx.requester.platformUserId,
+    approval.requiredTrustScope as TrustScope,
+    { platform: ctx.platform, chatId: ctx.chatId, topicId: ctx.topicId },
+    deps.trustedUsers,
+  );
+
+  const resolution = await resolveApprovalResponse(deps.db, {
+    approvalId: approval.id,
+    decision: isApprove ? "approved" : "rejected",
+    approver: ctx.requester,
+    approverIsTrusted,
+    decisionEventId: ctx.eventId,
+    currentProposedAction: approval.proposedAction,
+  });
+
+  // A non-trusted "approve" must not silently pass; leave the message to wake
+  // the actor normally (it can explain), and do not consume it.
+  if (resolution.status === "not_trusted") {
+    return false;
+  }
+
+  if (resolution.status === "approved" && resolution.action) {
+    await executeApprovedAction(deps, ctx.sessionId, resolution.action);
+  }
+  return true;
+}
+
+async function executeApprovedAction(
+  deps: WorkerDeps,
+  sessionId: string,
+  action: Record<string, unknown>,
+): Promise<void> {
+  const toolName = action.toolName as string | undefined;
+  const toolCallId = (action.toolCallId as string | undefined) ?? "approved";
+  if (!toolName) {
+    return; // non-tool approvals are recorded; execution handled elsewhere
+  }
+  const allowPort: ActionReviewPort = {
+    async authorize() {
+      return { allowed: true, reason: "trusted approval granted" };
+    },
+  };
+  const executor = new ToolExecutor(
+    deps.toolset.registry,
+    deps.toolset.handlers,
+    allowPort,
+    { safeAutoRunTools: deps.config.actionReview.safeAutoRunTools, requesterIsTrusted: true },
+  );
+  let result;
+  try {
+    result = await executor.run({
+      toolCallId,
+      toolName,
+      input: (action.input as Record<string, unknown>) ?? {},
+      reason: "approved by trusted user",
+    });
+  } catch (error) {
+    result = buildToolResult({
+      toolCallId,
+      toolName,
+      status: "failed",
+      error: {
+        code: "execution_error",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    });
+  }
+  await ingestInternalEvent(deps.db, {
+    sessionId,
+    eventType: "tool.result",
+    dedupeKey: `tool.result:approved:${idempotencyKeys.toolCall(toolCallId, toolName)}`,
+    source: { kind: "tool", toolName },
+    payload: result as unknown as Record<string, unknown>,
   });
 }
 
@@ -122,8 +304,22 @@ async function dispatchJob(
       return;
     }
     case "ambient_wake": {
-      // An ambient wake becomes an actor run that decides whether to speak.
-      const sessionId = job.payload.sessionId as string;
+      const sessionId = job.payload.sessionId as string | undefined;
+      if (!sessionId) {
+        return;
+      }
+      // Persist the wake as an event (the "wake -> event -> actor reads room"
+      // chain) then let the actor decide whether to speak.
+      const wake = job.payload.wake as Record<string, unknown> | undefined;
+      if (wake) {
+        await ingestInternalEvent(deps.db, {
+          sessionId,
+          eventType: "ambient.wake",
+          dedupeKey: `ambient.wake:${job.payload.dedupeKey ?? idempotencyKeys.toolCall(sessionId, "wake")}`,
+          source: { kind: "scheduler" },
+          payload: wake,
+        }).catch(() => undefined);
+      }
       const active = await runsRepository.findActiveRunForSession(
         deps.db,
         sessionId,
@@ -137,14 +333,38 @@ async function dispatchJob(
       }
       return;
     }
+    case "task_agent_run": {
+      // Task runtimes are not executable in this environment (no proven
+      // runtime). Report an honest failure result so the run does not hang.
+      const taskRunId = job.payload.taskRunId as string | undefined;
+      const parentSessionId = job.payload.parentSessionId as string | undefined;
+      if (parentSessionId && taskRunId) {
+        await ingestInternalEvent(deps.db, {
+          sessionId: parentSessionId,
+          eventType: "task.result",
+          dedupeKey: `task.result:${taskRunId}`,
+          source: { kind: "system", component: "task-agent" },
+          payload: {
+            taskSessionId: (job.payload.taskSessionId as string) ?? taskRunId,
+            taskRunId,
+            status: "failed",
+            summary: "task runtime is not available in this deployment",
+            error: {
+              code: "runtime_unavailable",
+              message: "no proven task runtime configured",
+            },
+          },
+        }).catch(() => undefined);
+      }
+      return;
+    }
     default:
       logger.warn("unhandled job type; completing", { type: job.type });
       return;
   }
 }
 
-/** One scheduler tick placeholder — real due-schedule loading is DB-backed. */
-export async function runSchedulerOnce(_deps: WorkerDeps): Promise<void> {
-  // The pure scheduler (fireDueSchedules) is wired here once schedules exist in
-  // the DB. No-op when there are no active schedules.
+/** Periodic maintenance: expire overdue approvals. */
+export async function runMaintenanceOnce(deps: WorkerDeps): Promise<void> {
+  await approvalsRepository.expireDueApprovals(deps.db);
 }

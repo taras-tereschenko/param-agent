@@ -7,6 +7,12 @@ export type ApprovalResponseInput = {
   approvalId: string;
   decision: "approved" | "rejected" | "revoked";
   approver: ActorRef;
+  /**
+   * Whether the approver was verified as a trusted user for the approval's
+   * required scope. The caller MUST compute this (isTrustedForScope); an
+   * approval is never resolved by an untrusted sender.
+   */
+  approverIsTrusted: boolean;
   decisionEventId?: string | null;
   /** If the live proposed action changed, approval is invalid — needs a new one. */
   currentProposedAction?: unknown;
@@ -20,7 +26,8 @@ export type ApprovalResolution = {
     | "revoked"
     | "not_found"
     | "already_decided"
-    | "proposal_changed";
+    | "proposal_changed"
+    | "not_trusted";
   /** The exact approved action, only when status === "approved". */
   action?: Record<string, unknown>;
   reason: string;
@@ -41,6 +48,14 @@ export async function resolveApprovalResponse(
   );
   if (!approval) {
     return { status: "not_found", reason: "approval not found" };
+  }
+  if (!input.approverIsTrusted) {
+    // Only trusted users with the required scope can resolve an approval.
+    // A merely-allowed (untrusted) sender never approves a consequential action.
+    return {
+      status: "not_trusted",
+      reason: "approver is not a trusted user for the required scope",
+    };
   }
   if (approval.status !== "pending") {
     return {

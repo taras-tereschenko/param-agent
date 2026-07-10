@@ -1,4 +1,4 @@
-import { redactValue } from "../security/redaction";
+import { redactString, redactValue } from "../security/redaction";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -50,7 +50,7 @@ export class Logger {
       ts: new Date().toISOString(),
       level,
       component: this.component,
-      message,
+      message: redactString(message),
       ...(fields ? (redactValue(fields) as Record<string, unknown>) : {}),
     };
     this.sink(JSON.stringify(record));

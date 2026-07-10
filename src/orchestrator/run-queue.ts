@@ -1,8 +1,11 @@
 import type { ParamDb } from "../db/client";
 import { jobsRepository } from "../db/repositories";
-import { runsRepository } from "../db/repositories";
+import { runsRepository, sessionsRepository } from "../db/repositories";
 import type { NewActorRun } from "../db/repositories/runs";
 import type { PromptRunType } from "../contracts/prompt";
+
+/** Lease applied to a new actor run so a crashed/orphaned run is recoverable. */
+export const ACTOR_RUN_LEASE_SECONDS = 300;
 
 /** Job types (docs/DATABASE.md). */
 export type ParamJobType =
@@ -54,8 +57,15 @@ export async function startActorRun(
     runtime: string;
     triggerEventId?: string | null;
     metadata?: Record<string, unknown>;
+    /**
+     * Delay before the run's job becomes due. Non-zero delays implement
+     * batching: messages arriving while this run is queued/active become
+     * context for it instead of each starting their own run.
+     */
+    dueAt?: Date;
   },
 ): Promise<{ runId: string; jobId: string } | undefined> {
+  const now = new Date();
   const runValues: NewActorRun = {
     sessionId: input.sessionId,
     runType: input.runType,
@@ -63,16 +73,22 @@ export async function startActorRun(
     status: "queued",
     triggerEventId: input.triggerEventId ?? null,
     metadata: input.metadata ?? {},
+    // Lease from birth so recovery can reclaim a run whose worker never
+    // processed it or crashed (findExpiredActiveRuns filters on lockExpiresAt).
+    lockExpiresAt: new Date(now.getTime() + ACTOR_RUN_LEASE_SECONDS * 1000),
   };
   const run = await runsRepository.createActorRun(db, runValues);
   if (!run) {
     return undefined;
   }
+  // Mark the session as having an active run so recovery can find wedged
+  // sessions and so ingest treats concurrent messages as steering.
+  await sessionsRepository.setActiveRun(db, input.sessionId, run.id);
   const job = await enqueueJob(
     db,
     "actor_invocation",
     { actorRunId: run.id, sessionId: input.sessionId, runType: input.runType },
-    { idempotencyKey: `actor_invocation:${run.id}` },
+    { idempotencyKey: `actor_invocation:${run.id}`, dueAt: input.dueAt },
   );
   return { runId: run.id, jobId: job.id };
 }

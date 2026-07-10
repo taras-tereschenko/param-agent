@@ -33,6 +33,8 @@ export type TelegramChannelAdapterOptions = {
   longPollTimeoutSeconds?: number;
   botUserId?: string;
   botUsername?: string;
+  /** Called when a single update fails to normalize/handle (non-fatal). */
+  onError?: (error: unknown, update: TelegramUpdate) => void;
 };
 
 export type PollResult = {
@@ -71,34 +73,44 @@ export class TelegramChannelAdapter {
     let maxUpdateId = offset !== undefined ? offset - 1 : -1;
 
     for (const update of updates) {
+      // Advance the offset for every update BEFORE any fallible work so a
+      // single poison update (bad payload, transient handler error) can never
+      // stall the whole poll loop by re-fetching the same update forever.
       if (update.update_id > maxUpdateId) {
         maxUpdateId = update.update_id;
       }
 
-      const inbound = normalizeTelegramUpdate(update, {
-        accountId: this.opts.accountId,
-        botUserId: this.opts.botUserId,
-        botUsername: this.opts.botUsername,
-      });
-      if (!inbound) {
-        skipped += 1;
-        continue;
-      }
+      try {
+        const inbound = normalizeTelegramUpdate(update, {
+          accountId: this.opts.accountId,
+          botUserId: this.opts.botUserId,
+          botUsername: this.opts.botUsername,
+        });
+        if (!inbound) {
+          skipped += 1;
+          continue;
+        }
 
-      const decision = evaluateTelegramAccess(
-        inbound.access,
-        this.opts.accessLists,
-      );
-      if (!decision.allowed) {
-        // Both "ignore" and "audit_minimal" drop the update here. The audit
-        // sink is wired in a higher layer; the adapter never surfaces the
-        // content of unauthorized traffic.
-        skipped += 1;
-        continue;
-      }
+        const decision = evaluateTelegramAccess(
+          inbound.access,
+          this.opts.accessLists,
+        );
+        if (!decision.allowed) {
+          // Both "ignore" and "audit_minimal" drop the update here. The audit
+          // sink is wired in a higher layer; the adapter never surfaces the
+          // content of unauthorized traffic.
+          skipped += 1;
+          continue;
+        }
 
-      await this.opts.onInbound(inbound, update);
-      handled += 1;
+        await this.opts.onInbound(inbound, update);
+        handled += 1;
+      } catch (error) {
+        // One bad update must not block newer ones. Drop it (offset already
+        // advanced) and keep going.
+        skipped += 1;
+        this.opts.onError?.(error, update);
+      }
     }
 
     const nextOffset = maxUpdateId >= 0 ? maxUpdateId + 1 : (offset ?? 0);

@@ -54,6 +54,8 @@ export type NormalizedInbound = {
   platform: PlatformRef;
   payload: Record<string, unknown>;
   access: AccessContext;
+  /** Chat title, when present, so callers can persist/update it. */
+  chatTitle?: string;
 };
 
 /**
@@ -326,29 +328,56 @@ function buildReplyTarget(
  * a JSON object it becomes `value`; anything else is wrapped as
  * `{ value: <remainder> }` so it always satisfies the contract's object shape.
  */
-function parseCallbackData(data: string | undefined): {
-  actionId: string;
-  value?: Record<string, unknown>;
-} {
-  if (!data) {
-    return { actionId: "callback" };
-  }
-  const separatorIndex = data.indexOf(":");
-  if (separatorIndex === -1) {
-    return { actionId: data };
-  }
-  const actionId = data.slice(0, separatorIndex) || "callback";
-  const remainder = data.slice(separatorIndex + 1);
-  const parsed = safeJsonParse(remainder);
+function coerceValue(raw: string): Record<string, unknown> {
+  const parsed = safeJsonParse(raw);
   if (
     parsed.ok &&
     parsed.value !== null &&
     typeof parsed.value === "object" &&
     !Array.isArray(parsed.value)
   ) {
-    return { actionId, value: parsed.value as Record<string, unknown> };
+    return parsed.value as Record<string, unknown>;
   }
-  return { actionId, value: { value: remainder } };
+  return { value: raw };
+}
+
+function parseCallbackData(data: string | undefined): {
+  actionId: string;
+  surfaceId?: string;
+  value?: Record<string, unknown>;
+} {
+  if (!data) {
+    return { actionId: "callback" };
+  }
+  // Param UI encoder format (see src/ui/callbacks.ts buildCallbackData):
+  //   cb:<surfaceId>:<actionId>[:<value>]  with each segment encodeURIComponent'd.
+  if (data.startsWith("cb:")) {
+    const parts = data.split(":");
+    const surfaceId = parts[1] ? safeDecode(parts[1]) : undefined;
+    const actionId = parts[2] ? safeDecode(parts[2]) : "callback";
+    const rest = parts.slice(3).join(":");
+    return {
+      actionId,
+      surfaceId,
+      value: rest ? coerceValue(safeDecode(rest)) : undefined,
+    };
+  }
+  // Fallback: split on the first ":" (bare actionId or actionId:remainder).
+  const separatorIndex = data.indexOf(":");
+  if (separatorIndex === -1) {
+    return { actionId: data };
+  }
+  const actionId = data.slice(0, separatorIndex) || "callback";
+  const remainder = data.slice(separatorIndex + 1);
+  return { actionId, value: coerceValue(remainder) };
+}
+
+function safeDecode(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
 }
 
 function normalizeMessage(
@@ -430,6 +459,7 @@ function normalizeMessage(
     platform: buildPlatformRef(ctx.accountId, access),
     payload,
     access,
+    chatTitle: message.chat.title,
   };
 }
 
@@ -474,6 +504,7 @@ function normalizeReaction(
     platform: buildPlatformRef(ctx.accountId, access),
     payload,
     access,
+    chatTitle: reaction.chat.title,
   };
 }
 
@@ -490,10 +521,11 @@ function normalizeCallback(
     callbackQuery.message?.message_thread_id,
   );
 
-  const { actionId, value } = parseCallbackData(callbackQuery.data);
+  const { actionId, surfaceId, value } = parseCallbackData(callbackQuery.data);
 
   const payload = chatActionCallbackPayloadSchema.parse({
     callbackId: callbackQuery.id,
+    surfaceId,
     actionId,
     value,
     platformMessageId: callbackQuery.message
@@ -504,13 +536,14 @@ function normalizeCallback(
   return {
     kind: "chat.action.callback",
     dedupeKey: idempotencyKeys.telegramUpdate(ctx.accountId, update.update_id),
-    occurredAt: callbackQuery.message
-      ? unixToIso(callbackQuery.message.date)
-      : nowIso(),
+    // A button press has no timestamp of its own; the message.date is when the
+    // button was originally sent, not pressed. Use now.
+    occurredAt: nowIso(),
     source: toUserActor(callbackQuery.from),
     platform: buildPlatformRef(ctx.accountId, access),
     payload,
     access,
+    chatTitle: callbackQuery.message?.chat.title,
   };
 }
 

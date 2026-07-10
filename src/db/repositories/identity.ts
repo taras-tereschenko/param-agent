@@ -138,7 +138,13 @@ export async function upsertPlatformChat(
   if (existing) {
     await db
       .update(platformChats)
-      .set({ lastSeenAt: now, updatedAt: now, title: input.title ?? null })
+      .set({
+        lastSeenAt: now,
+        updatedAt: now,
+        // Only overwrite the title when a new one is provided; never clobber a
+        // known title to null on updates that don't carry one.
+        ...(input.title ? { title: input.title } : {}),
+      })
       .where(eq(platformChats.id, existing.id));
     return existing;
   }

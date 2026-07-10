@@ -6,14 +6,23 @@ import type { SecretRef } from "../config/schema";
 import { createDbClient } from "../db/client";
 import {
   BotApiTransport,
+  buildRawPayloadRef,
   TelegramChannelAdapter,
   TelegramSender,
   type TelegramAccessLists,
 } from "../channels";
 import { scanForRecovery } from "../orchestrator/recovery";
 import { logger } from "../observability/logger";
+import { TaskAgentRegistry } from "../task-agents/registry";
 import { resolveInference } from "./inference";
-import { handleInbound, runJobsOnce, type WorkerDeps } from "./loops";
+import {
+  handleInbound,
+  runJobsOnce,
+  runMaintenanceOnce,
+  type WorkerDeps,
+} from "./loops";
+import { buildDefaultToolset, dispatchOutputs } from "./dispatch";
+import { resolveTrustedUsers } from "./trusted";
 
 type StringOrRef = string | SecretRef;
 
@@ -42,6 +51,31 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
 
   const { inference, note } = await resolveInference(config);
   log.info("actor inference resolved", { provider: inference.name, note });
+
+  // Production safety: consequential actions MUST require trusted approval.
+  if (
+    config.app.environment === "production" &&
+    !config.actionReview.trustedApprovalRequiredForConsequentialActions
+  ) {
+    throw new Error(
+      "production requires actionReview.trustedApprovalRequiredForConsequentialActions = true",
+    );
+  }
+
+  const trustedUsers = resolveTrustedUsers(config);
+  const toolset = buildDefaultToolset();
+  const taskAgentRegistry = new TaskAgentRegistry();
+  const dispatchDeps = {
+    db,
+    config,
+    trustedUsers,
+    toolRegistry: toolset.registry,
+    toolHandlers: toolset.handlers,
+    taskAgentRegistry,
+  };
+  const dispatch = (
+    ...args: Parameters<NonNullable<WorkerDeps["dispatchOutputs"]>>
+  ) => dispatchOutputs(dispatchDeps, ...args);
 
   // Reboot/crash recovery before processing anything.
   const recovery = await scanForRecovery(db);
@@ -79,6 +113,10 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
       config,
       workerId,
       accountLabel,
+      trustedUsers,
+      toolset,
+      dispatchOutputs: dispatch,
+      answerCallback: (callbackId: string) => sender.answerCallback(callbackId),
     };
     const workerDeps = deps;
     adapter = new TelegramChannelAdapter({
@@ -86,9 +124,13 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
       transport,
       accessLists,
       unauthorizedBehavior: telegram.access.unauthorizedBehavior,
-      onInbound: async (inbound) => {
-        await handleInbound(workerDeps, inbound);
+      onInbound: async (inbound, raw) => {
+        await handleInbound(workerDeps, inbound, buildRawPayloadRef(raw));
       },
+      onError: (error) =>
+        log.warn("inbound update failed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
     });
     const me = await transport.getMe().catch(() => undefined);
     log.info("telegram polling ready", { bot: me?.username ?? "unknown" });
@@ -103,10 +145,14 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
       config,
       workerId,
       accountLabel,
+      trustedUsers,
+      toolset,
+      dispatchOutputs: dispatch,
     };
   }
 
   let offset: number | undefined;
+  let lastMaintenanceMs = 0;
   log.info("worker started", { workerId });
 
   while (!signal.aborted) {
@@ -119,10 +165,19 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
       while (processed && !signal.aborted) {
         processed = await runJobsOnce(deps);
       }
+      // Periodic maintenance (expire overdue approvals) at most every 60s.
+      if (Date.now() - lastMaintenanceMs > 60_000) {
+        lastMaintenanceMs = Date.now();
+        await runMaintenanceOnce(deps);
+      }
     } catch (error) {
       log.error("worker loop error", {
         error: error instanceof Error ? error.message : String(error),
       });
+      // Back off on error so a persistent failure (revoked token, 429, DB
+      // blip) cannot busy-spin the loop and hammer the API/CPU.
+      await sleep(2_000, signal);
+      continue;
     }
     if (!adapter) {
       await sleep(1_000, signal);
@@ -158,5 +213,13 @@ if (import.meta.main) {
   const controller = new AbortController();
   process.on("SIGINT", () => controller.abort());
   process.on("SIGTERM", () => controller.abort());
-  await startWorker(controller.signal);
+  // Guard boot: a DB-down/misconfig at startup should exit cleanly (for the
+  // service manager to restart with backoff), not surface as an unhandled
+  // rejection.
+  startWorker(controller.signal).catch((error) => {
+    logger.child("worker").error("worker boot failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    process.exit(1);
+  });
 }

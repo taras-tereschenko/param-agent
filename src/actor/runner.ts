@@ -44,6 +44,8 @@ export type ActorTurnResult = {
   reactions: Reaction[];
   stayedQuiet: boolean;
   styleAdjusted: boolean;
+  /** Count of visible messages dropped because style could not be repaired. */
+  styleDropped: number;
   /** True when strong steering means the worker should refresh before delivery. */
   preSendRefreshRequired: boolean;
   /** True when a hard control forced the run to drop stale visible output. */
@@ -111,6 +113,7 @@ export async function runActorTurn(
   const visibleMessages: VisibleMessage[] = [];
   const reactions: Reaction[] = [];
   let styleAdjusted = false;
+  let styleDropped = 0;
 
   for (const draft of validation.accepted) {
     if (draft.type === "message") {
@@ -126,6 +129,7 @@ export async function runActorTurn(
       if (!guarded.ok) {
         // Could not make it Param-voiced; drop rather than deliver bad output.
         styleAdjusted = true;
+        styleDropped += 1;
         continue;
       }
       if (guarded.text !== draft.payload.text) {
@@ -169,6 +173,7 @@ export async function runActorTurn(
     reactions,
     stayedQuiet,
     styleAdjusted,
+    styleDropped,
     preSendRefreshRequired,
     interrupted: hardInterrupt,
     validation,
