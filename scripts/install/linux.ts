@@ -26,7 +26,9 @@ export function buildLinuxPlan(options: InstallOptions): HostPlan {
             privileged: true,
           },
         ]),
-    ...runtimeSteps(options.runtimes, (pkg) => `bun add -g ${pkg}`),
+    ...runtimeSteps(options.runtimes, (pkg) => `bun add -g ${pkg}`, {
+      codex: "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
+    }),
     ...(options.skipService
       ? []
       : [

@@ -25,7 +25,9 @@ export function buildMacosPlan(options: InstallOptions): HostPlan {
             mutating: true,
           },
         ]),
-    ...runtimeSteps(options.runtimes, (pkg) => `bun add -g ${pkg}`),
+    ...runtimeSteps(options.runtimes, (pkg) => `bun add -g ${pkg}`, {
+      codex: "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
+    }),
     {
       id: "dirs",
       description: `create data/log/workspace/artifact dirs under ${options.dataDir}`,

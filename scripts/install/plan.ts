@@ -42,18 +42,16 @@ export const defaultInstallOptions: InstallOptions = {
 export function runtimeSteps(
   runtimes: RuntimeChoice[],
   installCmd: (pkg: string) => string,
+  // Host-specific official install commands that override the package install
+  // (e.g. Codex ships a standalone installer that differs by OS — install.sh on
+  // macOS/Linux, install.ps1 on Windows). Falls back to the package install.
+  officialCommand: Partial<Record<RuntimeChoice, string>> = {},
 ): HostStep[] {
   // Global-package name for runtimes that install that way.
   const pkg: Record<RuntimeChoice, string> = {
     codex: "@openai/codex",
     opencode: "opencode-ai",
     antigravity: "antigravity",
-  };
-  // Codex's official install is a standalone script (Rust binary, no Node),
-  // preferred over the npm package. macOS/Linux use install.sh; the npm package
-  // remains a fallback. (Windows uses install.ps1 — verify per host.)
-  const officialCommand: Partial<Record<RuntimeChoice, string>> = {
-    codex: "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
   };
   return runtimes.map((runtime) => ({
     id: `runtime:${runtime}`,
