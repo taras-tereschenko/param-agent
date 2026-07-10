@@ -15,6 +15,7 @@
 #   --repo <url>      git repo (default: the public Param repo)
 #   --branch <name>   branch (default: feat/param-implementation)
 #   --dir <path>      install dir (default: $HOME/param-agent)
+#   -h, --help        show this help
 set -euo pipefail
 
 REPO_URL="${PARAM_REPO_URL:-https://github.com/taras-tereschenko/param-agent.git}"
@@ -168,13 +169,16 @@ fi
 # 6. Interactive setup (config questions). Needs a terminal to read answers.
 #    When piped (curl | bash), our own stdin is the script text, so setup reads
 #    the answers from /dev/tty (the controlling terminal) instead — the standard
-#    trick that lets `curl ... | bash` still prompt. Falls back to a clear
-#    message only when there is no terminal at all (e.g. CI).
+#    trick that lets `curl ... | bash` still prompt. We require stdout to be a
+#    terminal too ([ -t 1 ]): setup needs an interactive stdout, and without
+#    this guard a piped run whose output is redirected to a file would abort the
+#    whole bootstrap. Falls back to a clear message when there is no usable
+#    terminal (e.g. CI, or output redirected to a file).
 if [ "$RUN_SETUP" -eq 1 ]; then
-  if [ -t 0 ]; then
+  if [ -t 0 ] && [ -t 1 ]; then
     log "running setup (configuration questions)"
     bun run setup
-  elif { : </dev/tty; } 2>/dev/null; then
+  elif [ -t 1 ] && { : </dev/tty; } 2>/dev/null; then
     log "running setup (configuration questions)"
     bun run setup </dev/tty
   else
@@ -226,7 +230,7 @@ SQL
     bun run db:check
     DB_READY=1
   else
-    warn "could not read DATABASE_URL from .env; skipping DB provisioning"
+    warn "DATABASE_URL has no usable password (peer-auth, or a malformed % escape); skipping automatic role/DB provisioning. Create the 'param' role + database yourself (see docs/DEPLOY_VPS.md), then run 'bun run db:migrate && bun run db:check'."
   fi
 fi
 

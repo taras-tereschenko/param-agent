@@ -21,12 +21,20 @@ curl -fsSL https://raw.githubusercontent.com/taras-tereschenko/param-agent/feat/
 (The interactive `setup` prompts still work when piped — the script reads your
 answers from `/dev/tty`. Postgres + pgvector install by default; if you already
 have a database, skip that with `... | bash -s -- --skip-postgres`.) After it
-finishes, wire the brain (Step 4/7 below) and start the services (Step 8). The
-manual steps below are the same thing, broken out.
+finishes, wire the brain (Step 4 below).
+
+Note: the one-liner is a **single-user** layout — it installs as the user who
+runs it, into `$HOME/param-agent`, and does **not** create a dedicated `param`
+user or systemd services. To run Param as a hardened background service, follow
+the manual steps below instead (dedicated `param` user under `/var/lib/param-agent`
++ systemd); they are a **different, production layout**, not just the one-liner
+broken out. For a quick first run after the one-liner, start it in the
+foreground from the install dir: `bun run start:worker` (and `bun run start`).
 
 ## 0. Assumptions
 - You have root/sudo, a Telegram bot token from @BotFather, and your Telegram
-  numeric user id (use `bun run discover-telegram` after Step 5, or @userinfobot).
+  numeric user id (get it with `TELEGRAM_BOT_TOKEN=<token> bun run discover-telegram`
+  after Step 5, or from @userinfobot).
 
 ## 1. System packages
 ```bash
@@ -78,23 +86,31 @@ echo "say hi in one word" | codex exec
 > different flags, set `runtimes.codex.args` accordingly in Step 6.
 
 ## 5. Get the code
+The `param` service user needs its own Bun (Step 2 installed Bun only for you).
+Its home is `/var/lib/param-agent`, so Bun lands at `/var/lib/param-agent/.bun`.
 ```bash
 sudo useradd --system --create-home --home /var/lib/param-agent param || true
 sudo mkdir -p /var/lib/param-agent && sudo chown -R param:param /var/lib/param-agent
 sudo -u param bash -lc '
+  curl -fsSL https://bun.sh/install | bash
+  export BUN_INSTALL="$HOME/.bun"; export PATH="$BUN_INSTALL/bin:$PATH"
   git clone https://github.com/taras-tereschenko/param-agent.git ~/app
   cd ~/app && git checkout feat/param-implementation && bun install
 '
 ```
 
 ## 6. Configure + migrate
+Run as `param` via a login shell (`bash -lc`) so its `~/.bun/bin` is on PATH.
 ```bash
-cd /var/lib/param-agent/app
-sudo -u param bun run setup     # prompts: owner Telegram id, bot token, DATABASE_URL
+sudo -u param bash -lc 'cd ~/app && bun run setup'   # prompts: owner id, bot token, DATABASE_URL
 # DATABASE_URL should be: postgresql://param:REPLACE_ME_STRONG@127.0.0.1:5432/param
-sudo -u param bun run db:migrate
-sudo -u param bun run db:check  # must report extensions + tables ok
+sudo -u param bash -lc 'cd ~/app && bun run db:migrate && bun run db:check'
 ```
+(`db:migrate` creates the `pgcrypto` + `vector` extensions as role `param`. On
+the PGDG stack from Step 3 both are "trusted" so `param` can create them; on an
+older Postgres/pgvector they may need a superuser — then run
+`sudo -u postgres psql -d param -c 'CREATE EXTENSION vector; CREATE EXTENSION pgcrypto;'`
+before `db:migrate`.)
 Then edit `param.config.local.ts` (created by setup) to:
 - keep `channels.telegram.enabled: true`, `mode: "polling"`;
 - set `channels.telegram.access.allowedPrivateUserIds` to just your id at first;
@@ -126,7 +142,7 @@ Wants=network-online.target
 User=param
 WorkingDirectory=/var/lib/param-agent/app
 EnvironmentFile=/var/lib/param-agent/app/.env
-ExecStart=/home/param/.bun/bin/bun run start:worker
+ExecStart=/var/lib/param-agent/.bun/bin/bun run start:worker
 Restart=on-failure
 RestartSec=5
 

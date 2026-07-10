@@ -44,4 +44,26 @@ describe("install plans (dry-run buildable per host)", () => {
     const plan = buildLinuxPlan({ ...defaultInstallOptions, runtimes: [] });
     expect(plan.steps.filter((s) => s.id.startsWith("runtime:")).length).toBe(0);
   });
+
+  test("codex runtime step uses the official installer per host", () => {
+    const linux = buildLinuxPlan(defaultInstallOptions);
+    const macos = buildMacosPlan(defaultInstallOptions);
+    const windows = buildWindowsPlan(defaultInstallOptions);
+    const cmd = (plan: typeof linux, id: string) =>
+      plan.steps.find((s) => s.id === id)?.command ?? "";
+
+    // macOS/Linux use the shell installer; Windows uses the PowerShell one.
+    expect(cmd(linux, "runtime:codex")).toContain(
+      "https://chatgpt.com/codex/install.sh",
+    );
+    expect(cmd(macos, "runtime:codex")).toContain(
+      "https://chatgpt.com/codex/install.sh",
+    );
+    expect(cmd(windows, "runtime:codex")).toContain("install.ps1");
+    // regression guard: no sh command on Windows
+    expect(cmd(windows, "runtime:codex")).not.toContain("install.sh");
+
+    // opencode/antigravity still install as global packages.
+    expect(cmd(linux, "runtime:opencode")).toContain("bun add -g opencode-ai");
+  });
 });

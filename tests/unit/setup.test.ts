@@ -77,6 +77,40 @@ describe("setup file generation", () => {
     expect(envValueRoundTrips("🔑-key")).toBe(true);
   });
 
+  it("serialized secrets round-trip through Bun's real dotenv loader", async () => {
+    // Self-validating: write serialized values to a real .env, read them back
+    // in a fresh Bun process (auto-loads .env from cwd), and confirm each equals
+    // the original — and that envValueRoundTrips agreed they would.
+    const values = [
+      "postgresql://param:p4ss$word@127.0.0.1:5432/param",
+      "postgresql://param:pa%22ss@127.0.0.1:5432/param",
+      "abc$",
+      "ab$$",
+      "mid$dle$end$",
+      "a$(id)z",
+      "a${HOME}z",
+      "no-dollar-here",
+      "123456:abc_def-GHI",
+    ];
+    const dir = await mkdtemp(join(tmpdir(), "param-rt-"));
+    try {
+      const lines = values
+        .map((v, i) => `K${i}=${serializeEnvValue(v)}`)
+        .join("\n");
+      await Bun.write(join(dir, ".env"), `${lines}\n`);
+      const reader = `const o=[];for(let i=0;i<${values.length};i++)o.push(process.env["K"+i]??"");process.stdout.write(JSON.stringify(o));`;
+      const proc = Bun.spawnSync(["bun", "-e", reader], { cwd: dir });
+      const back = JSON.parse(proc.stdout.toString()) as string[];
+
+      values.forEach((v, i) => {
+        expect(envValueRoundTrips(v)).toBe(true);
+        expect(back[i]).toBe(v);
+      });
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("keeps secrets out of local config content", () => {
     const localConfig = buildLocalConfigFile(answers);
 
