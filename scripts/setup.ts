@@ -16,6 +16,7 @@ import {
   buildEnvFile,
   buildLocalConfigFile,
   detectHostPlatform,
+  envValueRoundTrips,
   isRuntimeChoice,
   runtimeChoices,
   runtimeLabel,
@@ -61,6 +62,13 @@ function validateDatabaseUrl(value: string | undefined) {
     }
   } catch {
     return "DATABASE_URL must be a valid URL";
+  }
+
+  // A raw `"` or `\` (or control char) in the URL — almost always an
+  // un-encoded password — would not survive the .env round-trip and silently
+  // corrupt the stored DATABASE_URL. Reject it now with a clear fix.
+  if (!envValueRoundTrips(input)) {
+    return 'percent-encode special characters in the password (e.g. " as %22, \\ as %5C)';
   }
 
   return undefined;

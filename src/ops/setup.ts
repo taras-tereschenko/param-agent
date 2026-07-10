@@ -146,14 +146,25 @@ export function serializeEnvValue(value: string) {
   // mangled — e.g. `p$word` -> `p`. We wrap in double quotes and escape `$`
   // -> `\$`, which Bun reads back as a literal `$` (and it performs no command
   // substitution / backtick expansion, so `$(...)`/backticks are inert once the
-  // leading `$` is escaped). This round-trips exactly for every value the setup
-  // actually serializes: a numeric owner id, the regex-restricted bot token,
-  // and a percent-encoded DATABASE_URL. NOTE: Bun's double-quote parser is not
-  // JSON-compatible — it does not collapse `\\`/`\"` — so a raw literal
-  // backslash or double-quote would NOT round-trip; those never occur in the
-  // serialized fields, and even if they did the effect is a wrong/failed local
-  // DB connect, never disclosure.
+  // leading `$` is escaped).
+  //
+  // Bun's double-quote parser is NOT JSON-compatible: it un-escapes only
+  // \n / \r / \$ and leaves \" and \\ (and \t etc.) literal. So a value with a
+  // raw `"`, `\`, or control char would NOT read back byte-for-byte. That is
+  // fine for the numeric owner id and the regex-restricted bot token, which
+  // cannot contain those. DATABASE_URL is not guaranteed percent-encoded, so
+  // callers gate it with `envValueRoundTrips` and reject un-round-trippable
+  // input up front (see scripts/setup.ts) rather than let it mangle silently.
   return JSON.stringify(value).replace(/\$/g, "\\$");
+}
+
+// True iff `value` survives serializeEnvValue -> Bun dotenv byte-for-byte.
+// Bun un-escapes only \n / \r / \$ in a double-quoted value, so a raw `"`, `\`,
+// or ASCII control char does not round-trip. (\n / \r technically would, but a
+// single-line prompt can't produce them, so we reject all controls for safety.)
+export function envValueRoundTrips(value: string) {
+  // eslint-disable-next-line no-control-regex
+  return !/["\\\u0000-\u001f]/.test(value);
 }
 
 export function buildLocalConfigFile(answers: Pick<SetupAnswers, "runtimes">) {

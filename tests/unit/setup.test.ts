@@ -8,6 +8,7 @@ import {
   buildLocalConfigFile,
   defaultHostPaths,
   detectHostPlatform,
+  envValueRoundTrips,
   pickDefaultRuntime,
   serializeEnvValue,
   type SetupAnswers,
@@ -43,6 +44,19 @@ describe("setup file generation", () => {
     // `p4ss$word` must round-trip literally, not get mangled.
     expect(serializeEnvValue("p4ss$word-${X}")).toBe('"p4ss\\$word-\\${X}"');
     expect(serializeEnvValue("no-dollar-here")).toBe('"no-dollar-here"');
+  });
+
+  it("flags values that would not survive the .env round-trip", () => {
+    // $ is handled by serializeEnvValue, so it round-trips.
+    expect(envValueRoundTrips("p4ss$word-${X}")).toBe(true);
+    expect(
+      envValueRoundTrips("postgresql://param:pa%22ss@127.0.0.1:5432/param"),
+    ).toBe(true);
+    expect(envValueRoundTrips("123456:abc_def-GHI")).toBe(true);
+    // Bun keeps \" and \\ literal, so a raw quote/backslash does not round-trip.
+    expect(envValueRoundTrips('postgresql://param:pa"ss@h/db')).toBe(false);
+    expect(envValueRoundTrips("postgresql://param:pa\\ss@h/db")).toBe(false);
+    expect(envValueRoundTrips("has\ttab")).toBe(false);
   });
 
   it("keeps secrets out of local config content", () => {
