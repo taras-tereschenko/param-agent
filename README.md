@@ -45,8 +45,11 @@ deterministic orchestrator, an LLM-pluggable Session Actor, Action Review,
 scoped memory, runtime adapters, scheduler, UI renderer, task agents, and
 end-to-end worker wiring.
 
-One-shot bootstrap on a fresh host (installs deps + bun, clones, installs local
-Postgres+pgvector, runs the config questions, migrates — see `docs/DEPLOY_VPS.md`):
+One-shot bootstrap on a fresh host: installs deps + bun + local Postgres/pgvector
++ the Codex CLI, clones Param, asks you for the Telegram owner id, bot token, and
+OpenAI API key (the DB password is auto-generated), provisions + migrates the DB,
+and **starts Param as a systemd service** — DM your bot and it replies. See
+`docs/DEPLOY_VPS.md`.
 
 ```text
 curl -fsSL https://raw.githubusercontent.com/taras-tereschenko/param-agent/feat/param-implementation/scripts/bootstrap.sh | bash
@@ -83,10 +86,14 @@ staged, so the target-architecture docs never conflict with the code.
 
 ### Session Actor inference
 
-The Codex CLI chat-brain path is a first-class target but is unproven in this
-build environment. See `docs/CODEX_CHAT_BRAIN_PROOF.md` for the gate result,
-exact blockers, and the safe pluggable fallback (the deterministic `MockActor`
-drives the full loop until a real inference path is configured).
+The default brain is the **OpenAI API** (`OPENAI_API_KEY`) via the AI SDK with
+structured output (`src/runtimes/openai`). A local **Codex CLI** (subscription
+or API key) is an alternative. `PARAM_ACTOR` selects the brain: `auto` (default)
+prefers OpenAI when keyed else the codex CLI; `openai`/`codex` force one; `mock`
+runs the deterministic `MockActor` (testing only). In production Param
+**refuses to start with no real brain** — it never silently uses the mock. The
+Codex-CLI path's raw-output reliability still needs host verification (see
+`docs/CODEX_CHAT_BRAIN_PROOF.md`).
 
 The referenced systems live in:
 

@@ -5,31 +5,35 @@ polling, so **no public HTTPS/inbound port is required** for the core bot. Run
 the app/worker behind the firewall; reach the operator/health endpoints over
 Tailscale.
 
-The Session Actor brain here is your local **Codex CLI** (direct-cli mode). Its
-non-interactive output reliability is the first thing to prove (Step 7).
+The default Session Actor brain is the **OpenAI API** — setup asks for your
+`OPENAI_API_KEY` and Param uses it directly (structured output, headless). A
+**Codex CLI** subscription is an alternative (Step 4). The deterministic
+MockActor is testing-only and never runs unless you set `PARAM_ACTOR=mock`; in
+production Param refuses to start with no real brain.
 
 ## Quick start (one-liner)
 
-On a fresh box, this installs prerequisites (curl/git/unzip/bun), clones Param,
-installs deps, installs local Postgres + pgvector, runs the interactive config
-questions, provisions the DB, and migrates:
+On a fresh box, this installs prerequisites (curl/git/unzip/bun), local
+Postgres + pgvector, and the Codex CLI; clones Param; asks you for your Telegram
+owner id, bot token, and OpenAI API key; provisions + migrates the database; and
+starts Param as a systemd service. When it finishes, **DM your bot — it replies**:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/taras-tereschenko/param-agent/feat/param-implementation/scripts/bootstrap.sh | bash
 ```
 
-(The interactive `setup` prompts still work when piped — the script reads your
-answers from `/dev/tty`. Postgres + pgvector install by default; if you already
-have a database, skip that with `... | bash -s -- --skip-postgres`.) After it
-finishes, wire the brain (Step 4 below).
-
-Note: the one-liner is a **single-user** layout — it installs as the user who
-runs it, into `$HOME/param-agent`, and does **not** create a dedicated `param`
-user or systemd services. To run Param as a hardened background service, follow
-the manual steps below instead (dedicated `param` user under `/var/lib/param-agent`
-+ systemd); they are a **different, production layout**, not just the one-liner
-broken out. For a quick first run after the one-liner, start it in the
-foreground from the install dir: `bun run start:worker` (and `bun run start`).
+Notes:
+- The interactive prompts work even when piped (the script reads answers from
+  `/dev/tty`). It asks only for the three things it can't generate: your Telegram
+  owner id, bot token, and OpenAI API key. The DB password is auto-generated.
+- The brain is the OpenAI API by default. Leave the key blank only if you'll use
+  a Codex subscription (`codex login`, Step 4) — then the services are installed
+  but not started until a brain exists.
+- `... | bash -s -- --skip-postgres` if you bring your own database.
+- The one-liner installs into `$HOME/param-agent` and runs the services as the
+  user who runs it (e.g. root). For a **hardened** layout — a dedicated `param`
+  system user under `/var/lib/param-agent` — follow the manual steps below
+  (Steps 5–10) instead.
 
 ## 0. Assumptions
 - You have root/sudo, a Telegram bot token from @BotFather, and your Telegram
@@ -72,7 +76,14 @@ SQL
 ```
 `db:migrate` enables the `pgcrypto` + `vector` extensions itself (Step 6).
 
-## 4. Codex CLI (the chat brain) + auth
+## 4. Brain: OpenAI API key (default) or Codex CLI (subscription)
+The default brain is the OpenAI API — set `OPENAI_API_KEY` in `.env` (setup asks
+for it) and you can skip the rest of this step. `PARAM_ACTOR=auto` (default)
+uses it when the key is present. Use `PARAM_ACTOR=openai` to force it, or
+`PARAM_ACTOR=mock` to deliberately run the deterministic actor.
+
+Prefer a ChatGPT/Codex **subscription** instead of paid API usage? Install the
+Codex CLI and sign in; leave `OPENAI_API_KEY` blank:
 ```bash
 # Official install script (standalone Rust binary, no Node.js needed):
 curl -fsSL https://chatgpt.com/codex/install.sh | sh
