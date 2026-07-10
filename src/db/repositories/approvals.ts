@@ -1,4 +1,4 @@
-import { and, eq, lte } from "drizzle-orm";
+import { and, desc, eq, lte } from "drizzle-orm";
 
 import type { ParamDb } from "../client";
 import {
@@ -91,7 +91,8 @@ export async function findPendingForSession(
     .from(approvals)
     .where(
       and(eq(approvals.sessionId, sessionId), eq(approvals.status, "pending")),
-    );
+    )
+    .orderBy(desc(approvals.createdAt));
 }
 
 export async function expireDueApprovals(
