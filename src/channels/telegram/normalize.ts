@@ -454,7 +454,12 @@ function normalizeMessage(
   return {
     kind,
     dedupeKey: idempotencyKeys.telegramUpdate(ctx.accountId, update.update_id),
-    occurredAt: unixToIso(message.date),
+    // Use the edit time for edits so an edited older message sorts to "now" and
+    // still lands in the actor's recent-events window (message.date is the
+    // original post time, which would sort it into the past and be missed).
+    occurredAt: unixToIso(
+      edited && message.edit_date ? message.edit_date : message.date,
+    ),
     source,
     platform: buildPlatformRef(ctx.accountId, access),
     payload,

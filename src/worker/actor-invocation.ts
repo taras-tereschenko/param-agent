@@ -96,13 +96,38 @@ export async function runActorInvocation(
   }
 
   // Retry safety: if this run already produced outputs (a crash re-claimed the
-  // job), do not re-run inference or re-deliver. Param must never deliver
-  // duplicate visible output, so we favor no-duplicate over at-least-once.
+  // job), do NOT re-run inference. But re-drive any visible message that was
+  // persisted yet never delivered (a crash between persist and send) so the
+  // reply is not lost. Only "pending" outputs are re-sent (delivered ones are
+  // marked succeeded), so at most the narrow send-then-crash-before-status
+  // window can duplicate — an accepted trade to never drop a reply.
   const priorOutputs = await runsRepository.listOutputsForRun(db, run.id);
   if (priorOutputs.length > 0) {
+    let redelivered = 0;
+    for (const prior of priorOutputs) {
+      if (prior.type !== "message" || prior.deliveryStatus !== "pending") {
+        continue;
+      }
+      const text = (prior.payload as { text?: string }).text;
+      if (!text) continue;
+      try {
+        await deps.delivery.sendText(text, {
+          chatId: session.platformChatId,
+          messageThreadId: session.messageThreadId ?? undefined,
+        });
+        await runsRepository.setOutputDelivery(db, prior.id, "succeeded");
+        redelivered += 1;
+      } catch {
+        // leave pending; a later pass can retry
+      }
+    }
     await runsRepository.markRunStatus(db, run.id, "completed");
     await sessionsRepository.setActiveRun(db, run.sessionId, null);
-    return { ran: false, delivered: 0, stayedQuiet: true };
+    return {
+      ran: false,
+      delivered: redelivered,
+      stayedQuiet: redelivered === 0,
+    };
   }
 
   await runsRepository.markRunStatus(db, run.id, "running");
@@ -225,7 +250,7 @@ export async function runActorInvocation(
       sequence += 1;
       const isVisible =
         draft.type === "message" || draft.type === "react_to_message";
-      const { output } = await runsRepository.insertActorOutput(db, {
+      const { output, inserted } = await runsRepository.insertActorOutput(db, {
         id: newId(),
         type: draft.type,
         sessionId: run.sessionId,
@@ -236,6 +261,13 @@ export async function runActorInvocation(
         validationStatus: "valid",
         deliveryStatus: isVisible ? "pending" : "not_applicable",
       });
+      // Only deliver outputs THIS run created. If the row already existed
+      // (idempotency-key conflict from a concurrently re-claimed run under a
+      // multi-worker deploy), the other worker owns delivery — skip, so a
+      // visible message is never sent twice.
+      if (!inserted) {
+        continue;
+      }
       if (draft.type === "message") {
         messagesToDeliver.push({
           outputId: output.id,

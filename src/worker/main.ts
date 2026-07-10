@@ -119,11 +119,17 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
       answerCallback: (callbackId: string) => sender.answerCallback(callbackId),
     };
     const workerDeps = deps;
+    // Resolve the bot's identity FIRST so the normalizer can detect @mentions
+    // and replies-to-Param in groups (without it, groups never read as
+    // "addressed" and get the slow ambient debounce / get missed).
+    const me = await transport.getMe().catch(() => undefined);
     adapter = new TelegramChannelAdapter({
       accountId: accountLabel,
       transport,
       accessLists,
       unauthorizedBehavior: telegram.access.unauthorizedBehavior,
+      botUserId: me?.id,
+      botUsername: me?.username,
       onInbound: async (inbound, raw) => {
         await handleInbound(workerDeps, inbound, buildRawPayloadRef(raw));
       },
@@ -132,7 +138,6 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
           error: error instanceof Error ? error.message : String(error),
         }),
     });
-    const me = await transport.getMe().catch(() => undefined);
     log.info("telegram polling ready", { bot: me?.username ?? "unknown" });
   } else {
     if (telegram?.enabled) {
