@@ -38,6 +38,13 @@ describe("setup file generation", () => {
     );
   });
 
+  it("escapes $ so Bun's dotenv does not expand it in secrets", () => {
+    // Bun expands $VAR / ${VAR} even inside quotes; a DB password like
+    // `p4ss$word` must round-trip literally, not get mangled.
+    expect(serializeEnvValue("p4ss$word-${X}")).toBe('"p4ss\\$word-\\${X}"');
+    expect(serializeEnvValue("no-dollar-here")).toBe('"no-dollar-here"');
+  });
+
   it("keeps secrets out of local config content", () => {
     const localConfig = buildLocalConfigFile(answers);
 

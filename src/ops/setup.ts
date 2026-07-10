@@ -141,7 +141,12 @@ PARAM_LOG_LEVEL=info
 }
 
 export function serializeEnvValue(value: string) {
-  return JSON.stringify(value);
+  // Bun's dotenv expands $VAR / ${VAR} inside .env values even when quoted, so a
+  // secret containing `$` (common in strong passwords / DB URLs) would be
+  // mangled — e.g. `p$word` -> `p`. JSON.stringify handles \, ", and control
+  // chars; escaping `$` -> `\$` (which Bun reads back as a literal `$`) covers
+  // the one remaining breaking character. Verified round-trip.
+  return JSON.stringify(value).replace(/\$/g, "\\$");
 }
 
 export function buildLocalConfigFile(answers: Pick<SetupAnswers, "runtimes">) {

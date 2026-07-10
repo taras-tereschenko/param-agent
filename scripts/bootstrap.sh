@@ -22,23 +22,41 @@ BRANCH="${PARAM_BRANCH:-feat/param-implementation}"
 TARGET_DIR="${PARAM_DIR:-$HOME/param-agent}"
 WITH_POSTGRES=0
 RUN_SETUP=1
+PROVISION_DB=0   # set to 1 only when auto DB provisioning is supported here
+
+log()  { printf '\n\033[1;32m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33mwarn:\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+usage() {
+  cat <<'USAGE'
+Param one-shot bootstrap.
+Installs prerequisites (curl, git, unzip, bun), clones Param, installs deps,
+and runs the interactive setup. With --with-postgres it also installs local
+Postgres + pgvector (apt-based Linux only), provisions the DB from .env, and
+migrates. Idempotent.
+
+Flags:
+  --with-postgres   also install + provision local Postgres (apt-based Linux)
+  --no-setup        skip the interactive `bun run setup`
+  --repo <url>      git repo (default: the public Param repo)
+  --branch <name>   branch (default: feat/param-implementation)
+  --dir <path>      install dir (default: $HOME/param-agent)
+  -h, --help        show this help
+USAGE
+}
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --with-postgres) WITH_POSTGRES=1 ;;
     --no-setup) RUN_SETUP=0 ;;
-    --repo) REPO_URL="$2"; shift ;;
-    --branch) BRANCH="$2"; shift ;;
-    --dir) TARGET_DIR="$2"; shift ;;
-    -h|--help) grep -E '^#( |$)' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) echo "unknown flag: $1" >&2; exit 1 ;;
+    --repo) [ $# -ge 2 ] || die "--repo requires a value"; REPO_URL="$2"; shift ;;
+    --branch) [ $# -ge 2 ] || die "--branch requires a value"; BRANCH="$2"; shift ;;
+    --dir) [ $# -ge 2 ] || die "--dir requires a value"; TARGET_DIR="$2"; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "unknown flag: $1 (see --help)" ;;
   esac
   shift
 done
-
-log()  { printf '\n\033[1;32m==>\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33mwarn:\033[0m %s\n' "$*" >&2; }
-die()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 OS="$(uname -s)"
 SUDO=""
@@ -79,6 +97,17 @@ pg_su() {
   else die "need root or sudo to manage Postgres"; fi
 }
 
+# Run `psql` as postgres with PARAM_DB_PW preserved in ITS environment, so the
+# password can be read via psql's \getenv and never appears in argv / ps /
+# /proc/<pid>/cmdline (which cmdline exposes world-readable).
+pg_su_env_psql() {
+  if command -v sudo >/dev/null 2>&1; then
+    sudo --preserve-env=PARAM_DB_PW -u postgres psql "$@"
+  elif [ "$(id -u)" -eq 0 ]; then
+    PARAM_DB_PW="$PARAM_DB_PW" runuser -u postgres -- psql "$@"
+  else die "need root or sudo to manage Postgres"; fi
+}
+
 log "Param bootstrap  (os=$OS  dir=$TARGET_DIR  branch=$BRANCH)"
 
 # 1. Prerequisites.
@@ -104,6 +133,8 @@ if [ -d "$TARGET_DIR/.git" ]; then
   git -C "$TARGET_DIR" fetch --quiet origin "$BRANCH"
   git -C "$TARGET_DIR" checkout --quiet "$BRANCH"
   git -C "$TARGET_DIR" pull --quiet --ff-only origin "$BRANCH" || warn "could not fast-forward; leaving as-is"
+elif [ -e "$TARGET_DIR" ] && [ -n "$(ls -A "$TARGET_DIR" 2>/dev/null)" ]; then
+  die "$TARGET_DIR exists and is not a Param checkout; remove it or pass --dir <path>"
 else
   log "cloning Param into $TARGET_DIR"
   git clone --quiet --branch "$BRANCH" "$REPO_URL" "$TARGET_DIR"
@@ -114,21 +145,22 @@ cd "$TARGET_DIR"
 log "installing dependencies (bun install)"
 bun install
 
-# 5. Optional: local Postgres + pgvector.
+# 5. Optional: local Postgres + pgvector. The automated install + provisioning
+#    path is apt-based Linux only (the VPS target); other platforms get clear
+#    manual guidance instead of a half-configured DB.
 if [ "$WITH_POSTGRES" -eq 1 ]; then
-  case "$OS" in
-    Linux)
-      log "installing Postgres + pgvector"
-      pkg_install postgresql postgresql-contrib
-      PGV="$(psql --version | grep -oE '[0-9]+' | head -1)"
-      pkg_install "postgresql-${PGV}-pgvector" || warn "pgvector package postgresql-${PGV}-pgvector unavailable"
-      $SUDO systemctl enable --now postgresql >/dev/null 2>&1 || true
-      log "postgres $(psql --version | awk '{print $3}')" ;;
-    Darwin)
-      log "installing Postgres + pgvector via Homebrew"
-      brew install postgresql@16 pgvector >/dev/null 2>&1 || true
-      brew services start postgresql@16 >/dev/null 2>&1 || true ;;
-  esac
+  if [ "$OS" = "Linux" ] && command -v apt-get >/dev/null 2>&1; then
+    log "installing Postgres + pgvector"
+    pkg_install postgresql postgresql-contrib
+    PGV="$(psql --version | grep -oE '[0-9]+' | head -1)"
+    pkg_install "postgresql-${PGV}-pgvector" \
+      || warn "pgvector package postgresql-${PGV}-pgvector unavailable; install it manually"
+    $SUDO systemctl enable --now postgresql >/dev/null 2>&1 || true
+    log "postgres $(psql --version | awk '{print $3}')"
+    PROVISION_DB=1
+  else
+    warn "auto Postgres install is only supported on apt-based Linux; install Postgres + pgvector manually, then run 'bun run db:migrate'"
+  fi
 fi
 
 # 6. Interactive setup (config questions). Requires a TTY.
@@ -142,14 +174,28 @@ if [ "$RUN_SETUP" -eq 1 ]; then
   fi
 fi
 
-# 7. Provision the DB + migrate (only if Postgres was installed, .env exists,
-#    and Linux). The DB password is read from .env and never printed.
-if [ "$WITH_POSTGRES" -eq 1 ] && [ -f .env ] && [ "$OS" = "Linux" ]; then
+# 7. Provision the DB + migrate (only when auto-provisioning is supported and
+#    .env exists). The DB password is read from .env and never printed/argv'd.
+if [ "$PROVISION_DB" -eq 1 ] && [ -f .env ]; then
   log "provisioning database from .env"
-  PW="$(bun -e 'try{process.stdout.write(new URL(process.env.DATABASE_URL||"").password)}catch(e){}')"
+  # decodeURIComponent: URL userinfo is percent-encoded; the Postgres client
+  # decodes it on connect, so the role must be created with the DECODED password.
+  PW="$(bun -e 'try{process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL||"").password))}catch(e){}')"
   if [ -n "$PW" ]; then
-    pg_su psql -v pw="$PW" -c "CREATE ROLE param LOGIN PASSWORD :'pw';" 2>/dev/null \
-      || pg_su psql -v pw="$PW" -c "ALTER ROLE param LOGIN PASSWORD :'pw';" >/dev/null 2>&1 || true
+    export PARAM_DB_PW="$PW"
+    # Create-or-update the role WITHOUT the password on argv: psql reads it from
+    # the environment via \getenv, and :'pw' quotes it safely into SQL.
+    pg_su_env_psql >/dev/null 2>&1 <<'SQL' || true
+\getenv pw PARAM_DB_PW
+CREATE ROLE param LOGIN PASSWORD :'pw';
+SQL
+    pg_su_env_psql >/dev/null 2>&1 <<'SQL' || true
+\getenv pw PARAM_DB_PW
+ALTER ROLE param LOGIN PASSWORD :'pw';
+SQL
+    unset PARAM_DB_PW
+    pg_su psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='param'" | grep -q 1 \
+      || die "could not create the 'param' Postgres role (try: sudo -u postgres psql)"
     pg_su psql -tAc "SELECT 1 FROM pg_database WHERE datname='param'" | grep -q 1 \
       || pg_su createdb -O param param
     pg_su psql -d param -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;" >/dev/null 2>&1 || true
@@ -169,7 +215,7 @@ Next steps:
   cd $TARGET_DIR
 $([ "$RUN_SETUP" -eq 0 ] && echo "  bun run setup                 # configure (owner id, bot token, DB url)")
   # brain: install Codex CLI + 'codex login' (or set OPENAI_API_KEY), OR use the MockActor
-  bun run db:migrate && bun run db:check   # if you did not use --with-postgres
+$([ "$PROVISION_DB" -eq 0 ] && echo "  bun run db:migrate && bun run db:check   # once Postgres+pgvector is available")
   bun run start:worker          # polling + jobs + actor runs (foreground to test)
   bun run start                 # Hono app (health endpoints)
 
