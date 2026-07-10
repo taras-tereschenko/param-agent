@@ -44,6 +44,11 @@ export type DispatchDeps = {
 
 const log = logger.child("dispatch");
 
+function approvalExpiry(deps: DispatchDeps): Date {
+  const minutes = deps.config.actionReview.approvalTimeoutMinutes;
+  return new Date(Date.now() + minutes * 60_000);
+}
+
 /**
  * Build the default tool registry + handlers: safe local read tools plus the
  * self-management tool definitions (consequential ones are approval-gated by
@@ -178,6 +183,7 @@ async function dispatchToolCall(
         requiredTrustScope: classification.requiredTrustScope,
       },
       requiredTrustScope: classification.requiredTrustScope,
+      expiresAt: approvalExpiry(deps),
     });
     await emitToolResult(deps, ctx, payload.toolCallId, def.name, {
       status: "blocked",
@@ -257,18 +263,43 @@ async function dispatchApprovalRequest(
   ctx: DispatchContext,
   payload: Extract<ActorOutputDraft, { type: "approval_request" }>["payload"],
 ): Promise<void> {
-  const scope =
+  // SECURITY: derive the required trust scope AUTHORITATIVELY from the action
+  // kind, not from the actor-supplied value. A prompt-injected actor must not
+  // be able to downgrade a server action to only need chat-level trust. Use the
+  // stricter of the classified scope and any actor-supplied scope.
+  const classified = classifyRisk({ actionKind: payload.actionKind });
+  const supplied =
     payload.requiredTrustScope === "chat" ||
     payload.requiredTrustScope === "project" ||
-    payload.requiredTrustScope === "server_admin"
+    payload.requiredTrustScope === "server_admin" ||
+    payload.requiredTrustScope === "global"
       ? payload.requiredTrustScope
-      : "global";
+      : undefined;
+  const scope = stricterScope(classified.requiredTrustScope, supplied);
   await createApprovalRequest(deps.db, {
     sessionId: ctx.sessionId,
     actorRunId: ctx.runId,
     request: { ...payload, requiredTrustScope: scope },
     requiredTrustScope: scope,
+    expiresAt: approvalExpiry(deps),
   });
+}
+
+const SCOPE_RANK: Record<string, number> = {
+  chat: 1,
+  project: 1,
+  global: 2,
+  server_admin: 3,
+};
+
+function stricterScope(
+  classified: "global" | "chat" | "project" | "server_admin",
+  supplied?: "global" | "chat" | "project" | "server_admin",
+): "global" | "chat" | "project" | "server_admin" {
+  if (!supplied) return classified;
+  return (SCOPE_RANK[supplied] ?? 0) > (SCOPE_RANK[classified] ?? 0)
+    ? supplied
+    : classified;
 }
 
 async function dispatchSpawn(
