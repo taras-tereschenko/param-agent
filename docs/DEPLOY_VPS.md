@@ -15,15 +15,14 @@ installs deps, installs local Postgres + pgvector, runs the interactive config
 questions, provisions the DB, and migrates:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taras-tereschenko/param-agent/feat/param-implementation/scripts/bootstrap.sh -o bootstrap.sh
-bash bootstrap.sh --with-postgres
+curl -fsSL https://raw.githubusercontent.com/taras-tereschenko/param-agent/feat/param-implementation/scripts/bootstrap.sh | bash -s -- --with-postgres
 ```
 
-(Download-then-run so the interactive `setup` prompts have a TTY; piping
-straight into `bash` skips the interactive step, which the script detects and
-tells you to run `bun run setup` yourself. Omit `--with-postgres` to skip the
-database install.) After it finishes, wire the brain (Step 4/7 below) and start
-the services (Step 8). The manual steps below are the same thing, broken out.
+(`bash -s -- --with-postgres` just passes the `--with-postgres` flag to the
+piped script. The interactive `setup` prompts still work when piped: the script
+reads your answers from `/dev/tty`. Omit `--with-postgres` to skip the database
+install.) After it finishes, wire the brain (Step 4/7 below) and start the
+services (Step 8). The manual steps below are the same thing, broken out.
 
 ## 0. Assumptions
 - You have root/sudo, a Telegram bot token from @BotFather, and your Telegram

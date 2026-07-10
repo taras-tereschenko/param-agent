@@ -164,13 +164,20 @@ if [ "$WITH_POSTGRES" -eq 1 ]; then
   fi
 fi
 
-# 6. Interactive setup (config questions). Requires a TTY.
+# 6. Interactive setup (config questions). Needs a terminal to read answers.
+#    When piped (curl | bash), our own stdin is the script text, so setup reads
+#    the answers from /dev/tty (the controlling terminal) instead — the standard
+#    trick that lets `curl ... | bash` still prompt. Falls back to a clear
+#    message only when there is no terminal at all (e.g. CI).
 if [ "$RUN_SETUP" -eq 1 ]; then
   if [ -t 0 ]; then
     log "running setup (configuration questions)"
     bun run setup
+  elif { : </dev/tty; } 2>/dev/null; then
+    log "running setup (configuration questions)"
+    bun run setup </dev/tty
   else
-    warn "no interactive terminal (script was piped); run 'cd $TARGET_DIR && bun run setup' to configure"
+    warn "no interactive terminal available; run 'cd $TARGET_DIR && bun run setup' to configure"
     RUN_SETUP=0
   fi
 fi
