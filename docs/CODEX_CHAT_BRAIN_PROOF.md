@@ -4,7 +4,25 @@ This document records the result of the first implementation gate: proving
 whether Codex CLI can serve as Param's Session Actor chat brain before building
 large features on top of it (per `GOAL.md`).
 
-## Result: BLOCKED in this environment (documented, with a safe fallback)
+## Update: direct-CLI chat-brain is now IMPLEMENTED (prove on the host)
+
+`CodexCliActor` (`src/runtimes/codex/cli-actor.ts`) implements the direct local
+`codex` CLI chat-brain: it runs the configured `codex` command non-interactively
+with the compiled Param prompt + a strict JSON output instruction, and parses
+stdout into actor outputs. `resolveInference` selects it when
+`actor.defaultRuntime === "codex"`, `runtimes.codex.adapter` is `direct-cli`, and
+the CLI is available; otherwise it falls back to the MockActor. If the CLI is
+missing, times out, errors, or returns unparseable output, the turn degrades to
+a safe `no_reply` (it never crashes or delivers garbage). Unit-tested with a fake
+runner (valid JSON, fenced JSON, unparseable, non-zero exit, missing binary).
+
+Still UNPROVEN in THIS build environment (no `codex` installed, no auth). It must
+be proven on the deployment host: install + `codex login`, then Step 7 of
+`docs/DEPLOY_VPS.md` (DM the bot, confirm a coherent reply, tune
+`runtimes.codex.args` if Codex does not emit the strict JSON). Record the outcome
+below when proven.
+
+## Result (build env): BLOCKED here (documented, with a safe fallback)
 
 Codex chat-brain inference **could not be proven** in the build environment.
 This is the explicitly-anticipated "document the blocker and safest fallback"

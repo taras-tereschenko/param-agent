@@ -42,6 +42,7 @@ Subsystem docs:
 - `channels/TELEGRAM.md` is the first concrete channel adapter.
 - `CODEX_CHAT_BRAIN_PROOF.md` records the actor-inference gate result.
 - `IMPLEMENTATION_STATUS.md` records what is wired vs staged vs placeholder.
+- `DEPLOY_VPS.md` is the copy-paste VPS deployment runbook.
 - `REFERENCES.md` records source notes and lessons from existing systems.
 
 ## Architecture Map

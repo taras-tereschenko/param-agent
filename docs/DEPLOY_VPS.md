@@ -1,0 +1,136 @@
+# Deploying Param on a VPS (Hetzner CX23 / Ubuntu)
+
+Copy-paste runbook for a fresh Ubuntu 22.04/24.04 VPS. Param uses Telegram long
+polling, so **no public HTTPS/inbound port is required** for the core bot. Run
+the app/worker behind the firewall; reach the operator/health endpoints over
+Tailscale.
+
+The Session Actor brain here is your local **Codex CLI** (direct-cli mode). Its
+non-interactive output reliability is the first thing to prove (Step 7).
+
+## 0. Assumptions
+- You have root/sudo, a Telegram bot token from @BotFather, and your Telegram
+  numeric user id (use `bun run discover-telegram` after Step 5, or @userinfobot).
+
+## 1. System packages
+```bash
+sudo apt-get update
+sudo apt-get install -y curl git unzip ufw
+```
+
+## 2. Bun
+```bash
+curl -fsSL https://bun.sh/install | bash
+# add to PATH for this shell + persist (adjust for your shell):
+export BUN_INSTALL="$HOME/.bun"; export PATH="$BUN_INSTALL/bin:$PATH"
+bun --version
+```
+
+## 3. Postgres + pgvector
+```bash
+sudo apt-get install -y postgresql postgresql-contrib
+# pgvector package name matches the server major version (e.g. 16):
+PGV=$(psql -V | grep -oE '[0-9]+' | head -1)
+sudo apt-get install -y "postgresql-${PGV}-pgvector"
+sudo systemctl enable --now postgresql
+
+# create role + db (pick a strong password):
+sudo -u postgres psql <<'SQL'
+CREATE ROLE param WITH LOGIN PASSWORD 'REPLACE_ME_STRONG';
+CREATE DATABASE param OWNER param;
+SQL
+```
+`db:migrate` enables the `pgcrypto` + `vector` extensions itself (Step 6).
+
+## 4. Codex CLI (the chat brain) + auth
+```bash
+# Install per the current official docs; commonly:
+bun add -g @openai/codex        # or: npm i -g @openai/codex
+codex --version
+codex login                     # subscription/ChatGPT sign-in (interactive, once)
+# Confirm a headless run works and note the exact flags for your version:
+echo "say hi in one word" | codex exec
+```
+> If `codex exec` reads the prompt as an ARG rather than stdin, or uses
+> different flags, set `runtimes.codex.args` accordingly in Step 6.
+
+## 5. Get the code
+```bash
+sudo useradd --system --create-home --home /var/lib/param-agent param || true
+sudo mkdir -p /var/lib/param-agent && sudo chown -R param:param /var/lib/param-agent
+sudo -u param bash -lc '
+  git clone https://github.com/taras-tereschenko/param-agent.git ~/app
+  cd ~/app && git checkout feat/param-implementation && bun install
+'
+```
+
+## 6. Configure + migrate
+```bash
+cd /var/lib/param-agent/app
+sudo -u param bun run setup     # prompts: owner Telegram id, bot token, DATABASE_URL
+# DATABASE_URL should be: postgresql://param:REPLACE_ME_STRONG@127.0.0.1:5432/param
+sudo -u param bun run db:migrate
+sudo -u param bun run db:check  # must report extensions + tables ok
+```
+Then edit `param.config.local.ts` (created by setup) to:
+- keep `channels.telegram.enabled: true`, `mode: "polling"`;
+- set `channels.telegram.access.allowedPrivateUserIds` to just your id at first;
+- keep `actor.defaultRuntime: "codex"` and `runtimes.codex.adapter: "direct-cli"`,
+  `command: "codex"`, and `args` matching your `codex exec` invocation.
+
+## 7. PROVE the Codex chat-brain (first gate)
+Run the worker in the foreground and DM your bot:
+```bash
+sudo -u param PARAM_LOG_LEVEL=debug bun run start:worker
+```
+- Expect a `actor inference resolved { provider: "codex-cli" }` log.
+- DM the bot "hey" — you should get a short, coherent reply.
+- If Param stays silent and logs `codex cli produced no valid outputs`, Codex is
+  not returning the strict JSON output. Fix by tuning `runtimes.codex.args` /
+  the invocation, or (fallback) leave `codex` unavailable so Param uses the
+  MockActor while you wire an API provider. Param never crashes on bad output —
+  it stays quiet. Record the result in `docs/CODEX_CHAT_BRAIN_PROOF.md`.
+
+## 8. Services (systemd)
+`/etc/systemd/system/param-worker.service`:
+```ini
+[Unit]
+Description=Param worker
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=param
+WorkingDirectory=/var/lib/param-agent/app
+EnvironmentFile=/var/lib/param-agent/app/.env
+ExecStart=/home/param/.bun/bin/bun run start:worker
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+`/etc/systemd/system/param-app.service` (same, `ExecStart=... run start`, and
+`Environment=PORT=8080`).
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now param-worker param-app
+```
+
+## 9. Verify + secure
+```bash
+curl -s localhost:8080/health          # {"ok":true,...}
+curl -s localhost:8080/health/db       # db + extensions ok
+journalctl -u param-worker -f          # watch it poll + reply
+sudo ufw allow OpenSSH && sudo ufw enable   # do NOT expose 8080 publicly
+# reach /operator/health over Tailscale, not the public interface.
+```
+
+## 10. Restart survival
+`systemctl restart param-worker` (or reboot): the worker runs recovery on boot
+(reclaims leased runs, requeues jobs) and resumes polling from Telegram's
+confirmed offset. Migrations are idempotent; re-running `db:migrate` is safe.
+
+## Rollback
+`sudo systemctl stop param-worker param-app`. State is in Postgres; no
+destructive migration is applied on stop.

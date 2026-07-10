@@ -66,7 +66,10 @@ Last reviewed against a full audit + review pass.
 
 ## Intentional placeholders
 
-- Codex chat-brain inference (blocked here — documented with fallback).
+- Codex chat-brain inference: the direct-CLI path (`CodexCliActor`) is
+  implemented + unit-tested and is selected when the `codex` CLI is available;
+  it is unproven in this build env (no CLI/auth) and must be proven on the host
+  (docs/DEPLOY_VPS.md Step 7). The AI SDK harness path remains probe-only.
 - Image/browser task runtimes.
 - Telegram webhook mode (polling is the default; the webhook route acks only).
 - The `evals/` scenario harness is scaffolded; scenario suites are added over time.
