@@ -27,7 +27,8 @@ export type ApprovalResolution = {
     | "not_found"
     | "already_decided"
     | "proposal_changed"
-    | "not_trusted";
+    | "not_trusted"
+    | "self_approval";
   /** The exact approved action, only when status === "approved". */
   action?: Record<string, unknown>;
   reason: string;
@@ -56,6 +57,25 @@ export async function resolveApprovalResponse(
       status: "not_trusted",
       reason: "approver is not a trusted user for the required scope",
     };
+  }
+  // Two-person rule: the requester must not APPROVE their own request. (Denying
+  // your own request only cancels it, so that is allowed.)
+  if (input.decision === "approved" && input.approver.kind === "user") {
+    const requester = approval.requestedBy as
+      | { platform?: string; platformUserId?: string }
+      | null
+      | undefined;
+    if (
+      requester?.platformUserId &&
+      requester.platform === input.approver.platform &&
+      requester.platformUserId === input.approver.platformUserId
+    ) {
+      return {
+        status: "self_approval",
+        reason:
+          "the requester cannot approve their own request; a different trusted user must approve",
+      };
+    }
   }
   if (approval.status !== "pending") {
     return {

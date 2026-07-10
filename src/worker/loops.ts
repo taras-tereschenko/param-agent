@@ -34,8 +34,11 @@ export type WorkerDeps = ActorInvocationDeps & {
   answerCallback?: (callbackId: string) => Promise<void>;
 };
 
-const APPROVE = /^\/?(approve|approved|yes|yep|ok|okay|do it|confirm|go ahead)\b/i;
-const DENY = /^\/?(deny|denied|no|nope|stop|cancel|reject|abort)\b/i;
+// Explicit approval verbs only. Casual "ok"/"yes"/"no" must NOT resolve a
+// pending consequential action (that caused accidental approvals). The durable
+// fix is inline-button approval bound to a specific approval id.
+const APPROVE = /^\/?(approve|approved|confirm)\b/i;
+const DENY = /^\/?(deny|denied|decline|reject)\b/i;
 
 /**
  * Handle one normalized inbound event: persist it (deduped, with raw payload),
@@ -202,9 +205,13 @@ async function maybeHandleApprovalReply(
     currentProposedAction: approval.proposedAction,
   });
 
-  // A non-trusted "approve" must not silently pass; leave the message to wake
-  // the actor normally (it can explain), and do not consume it.
-  if (resolution.status === "not_trusted") {
+  // A non-trusted "approve", or a requester trying to approve their own request,
+  // must not silently pass; leave the message to wake the actor (it can
+  // explain) and do not consume it.
+  if (
+    resolution.status === "not_trusted" ||
+    resolution.status === "self_approval"
+  ) {
     return false;
   }
 

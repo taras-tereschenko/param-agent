@@ -165,6 +165,14 @@ async function dispatchToolCall(
       classification.requiredTrustScope,
     ),
     isSafeAutoRun,
+    // Enforce the config flag: when trusted approval is required for
+    // consequential actions, lower the trusted auto-run ceiling to "safe" so
+    // ANY consequential tool call needs an explicit approval (production boot
+    // requires this flag). Otherwise trusted users auto-run up to medium.
+    autoReviewMaxRiskForTrusted: deps.config.actionReview
+      .trustedApprovalRequiredForConsequentialActions
+      ? "safe"
+      : "medium",
   });
 
   if (decision.decision === "auto_allowed") {

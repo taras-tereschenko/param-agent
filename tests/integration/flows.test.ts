@@ -170,6 +170,40 @@ if (!databaseUrl) {
         });
         expect(replay.status).toBe("already_decided");
 
+        // Two-person rule: the requester cannot approve their OWN request.
+        const selfAction = { tool: "service.restart", target: "self-test" };
+        const selfReq = await createApprovalRequest(db, {
+          sessionId: first.sessionId,
+          request: {
+            approvalId: randomUUID(),
+            actionKind: "server_action",
+            requesterEventIds: [first.eventId],
+            requestedBy: {
+              kind: "user",
+              platform: "telegram",
+              platformUserId: "owner",
+            },
+            title: "restart worker (self)",
+            summary: "restart",
+            exactPreview: "systemctl restart param-worker",
+            proposedAction: selfAction,
+            requiredTrustScope: "server_admin",
+          },
+          requiredTrustScope: "server_admin",
+        });
+        const selfApprove = await resolveApprovalResponse(db, {
+          approvalId: selfReq.approvalId,
+          decision: "approved",
+          approver: {
+            kind: "user",
+            platform: "telegram",
+            platformUserId: "owner",
+          },
+          approverIsTrusted: true,
+          currentProposedAction: selfAction,
+        });
+        expect(selfApprove.status).toBe("self_approval");
+
         // Memory scope isolation: group memory must not surface in a DM.
         await storeMemory(db, {
           scope: "user",
