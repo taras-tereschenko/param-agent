@@ -20,7 +20,8 @@ export function buildWindowsPlan(options: InstallOptions): HostPlan {
       : [
           {
             id: "pkg:postgres",
-            description: "install PostgreSQL (winget) + pgvector",
+            description:
+              "install PostgreSQL (winget); install pgvector separately (see pgvector docs for Windows)",
             command: "winget install PostgreSQL.PostgreSQL",
             mutating: true,
           },

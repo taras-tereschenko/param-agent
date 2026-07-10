@@ -33,8 +33,9 @@ foreground from the install dir: `bun run start:worker` (and `bun run start`).
 
 ## 0. Assumptions
 - You have root/sudo, a Telegram bot token from @BotFather, and your Telegram
-  numeric user id (get it with `TELEGRAM_BOT_TOKEN=<token> bun run discover-telegram`
-  after Step 5, or from @userinfobot).
+  numeric user id (get it after Step 5 with
+  `sudo -u param bash -lc 'cd ~/app && TELEGRAM_BOT_TOKEN=<token> bun run discover-telegram'`,
+  or just message @userinfobot).
 
 ## 1. System packages
 ```bash
@@ -120,8 +121,9 @@ Then edit `param.config.local.ts` (created by setup) to:
 ## 7. PROVE the Codex chat-brain (first gate)
 Run the worker in the foreground and DM your bot:
 ```bash
-sudo -u param PARAM_LOG_LEVEL=debug bun run start:worker
+sudo -u param bash -lc 'cd ~/app && PARAM_LOG_LEVEL=debug bun run start:worker'
 ```
+(One-liner / single-user install: just `cd ~/param-agent && PARAM_LOG_LEVEL=debug bun run start:worker` — no `sudo -u param`.)
 - Expect a `actor inference resolved { provider: "codex-cli" }` log.
 - DM the bot "hey" — you should get a short, coherent reply.
 - If Param stays silent and logs `codex cli produced no valid outputs`, Codex is
@@ -141,7 +143,6 @@ Wants=network-online.target
 [Service]
 User=param
 WorkingDirectory=/var/lib/param-agent/app
-EnvironmentFile=/var/lib/param-agent/app/.env
 ExecStart=/var/lib/param-agent/.bun/bin/bun run start:worker
 Restart=on-failure
 RestartSec=5
@@ -149,6 +150,13 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 ```
+> Do NOT add `EnvironmentFile=.../.env`: `.env` is in Bun's dotenv format (a `$`
+> in a password is stored escaped as `\$`), and systemd's own parser reads that
+> differently. Bun auto-loads `.env` from `WorkingDirectory`, and a value
+> already present in the process env is NOT overridden — so a systemd-injected
+> value would win and mangle a `$`-containing password. Letting Bun load `.env`
+> keeps parsing consistent.
+
 `/etc/systemd/system/param-app.service` (same, `ExecStart=... run start`, and
 `Environment=PORT=8080`).
 ```bash
