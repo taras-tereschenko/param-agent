@@ -99,6 +99,12 @@ export class OpenAiApiActor implements ActorInference {
       const { object } = await generateObject({
         model: this.resolveModel(),
         schema: responseSchema,
+        // OpenAI's strict structured-output mode rejects this schema (a Zod
+        // discriminatedUnion emits `oneOf`, which strict forbids, and fields
+        // with defaults drop out of `required`, which strict also forbids).
+        // Non-strict json_schema still guides the model and generateObject
+        // validates the result against the Zod schema.
+        providerOptions: { openai: { strictJsonSchema: false } },
         system: request.renderedPrompt,
         prompt: OUTPUT_INSTRUCTION,
         abortSignal: AbortSignal.timeout(this.timeoutMs),
