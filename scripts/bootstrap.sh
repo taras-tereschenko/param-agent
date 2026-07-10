@@ -307,11 +307,25 @@ UNIT
   $SUDO systemctl daemon-reload >/dev/null 2>&1 || true
   $SUDO systemctl enable param-worker param-app >/dev/null 2>&1 || true
   if [ -n "$HAS_BRAIN" ]; then
-    if $SUDO systemctl restart param-worker param-app; then
-      SERVICES_UP=1
-      log "Param services started (param-worker + param-app)"
-    else
-      warn "services installed but failed to start; check 'journalctl -u param-worker -e'"
+    # If an OpenAI key is configured, verify the brain actually replies BEFORE
+    # starting, so a bad key/model surfaces now (with the real error) instead of
+    # a silent, mute service. (Codex-subscription path may need `codex login`
+    # first, so it isn't gated here.)
+    BRAIN_OK=1
+    if bun -e 'process.exit((process.env.OPENAI_API_KEY||"").trim()?0:1)' >/dev/null 2>&1; then
+      log "verifying the brain replies"
+      if ! bun run brain:check; then
+        BRAIN_OK=""
+        warn "brain check failed (see the error above) — services installed but NOT started. Fix OPENAI_API_KEY / PARAM_OPENAI_MODEL in $TARGET_DIR/.env, then: ${SUDO:+$SUDO }systemctl start param-worker param-app"
+      fi
+    fi
+    if [ -n "$BRAIN_OK" ]; then
+      if $SUDO systemctl restart param-worker param-app; then
+        SERVICES_UP=1
+        log "Param services started (param-worker + param-app)"
+      else
+        warn "services installed but failed to start; check 'journalctl -u param-worker -e'"
+      fi
     fi
   else
     warn "no brain configured yet — set OPENAI_API_KEY in $TARGET_DIR/.env (or run 'codex login'), then: ${SUDO:+$SUDO }systemctl start param-worker param-app"
