@@ -166,12 +166,20 @@ export function serializeEnvValue(value: string) {
 }
 
 // True iff `value` survives serializeEnvValue -> Bun dotenv byte-for-byte.
-// Bun un-escapes only \n / \r / \$ in a double-quoted value, so a raw `"`, `\`,
-// or ASCII control char does not round-trip. (\n / \r technically would, but a
-// single-line prompt can't produce them, so we reject all controls for safety.)
+// Bun un-escapes only \n / \r / \$ in a double-quoted value, so a raw `"`,
+// a `\`, an ASCII control char, or a lone surrogate (JSON.stringify emits a
+// \uXXXX escape that Bun does not decode) does NOT round-trip. (\n / \r
+// technically would, but a single-line prompt can't produce them, so we reject
+// all control chars for safety.)
 export function envValueRoundTrips(value: string) {
-  // eslint-disable-next-line no-control-regex
-  return !/["\\\u0000-\u001f]/.test(value);
+  for (const ch of value) {
+    const code = ch.charCodeAt(0);
+    if (ch === '"' || ch === "\\" || code < 0x20) return false;
+    // Lone surrogate: `for...of` yields it as a length-1 unit (a valid pair is
+    // length 2). JSON.stringify escapes it as \uXXXX, which Bun won't decode.
+    if (ch.length === 1 && code >= 0xd800 && code <= 0xdfff) return false;
+  }
+  return true;
 }
 
 export function buildLocalConfigFile(answers: Pick<SetupAnswers, "runtimes">) {

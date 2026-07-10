@@ -69,6 +69,12 @@ describe("setup file generation", () => {
     expect(envValueRoundTrips('postgresql://param:pa"ss@h/db')).toBe(false);
     expect(envValueRoundTrips("postgresql://param:pa\\ss@h/db")).toBe(false);
     expect(envValueRoundTrips("has\ttab")).toBe(false);
+    // Lone surrogate: JSON.stringify emits \uXXXX, which Bun does not decode,
+    // so it does not round-trip — the predicate must reject it. (Valid paired
+    // surrogates / emoji are well-formed and accepted.)
+    expect(envValueRoundTrips("\uD800")).toBe(false);
+    expect(envValueRoundTrips("a\uDC00b")).toBe(false);
+    expect(envValueRoundTrips("🔑-key")).toBe(true);
   });
 
   it("keeps secrets out of local config content", () => {
