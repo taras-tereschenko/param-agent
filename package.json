@@ -25,6 +25,7 @@
   "dependencies": {
     "@ai-sdk/harness": "^1.0.0-beta.20",
     "@ai-sdk/harness-codex": "^1.0.0-beta.16",
+    "@ai-sdk/openai": "^4.0.11",
     "@ai-sdk/sandbox-vercel": "^1.0.0-beta.20",
     "@chat-adapter/state-pg": "^4.30.0",
     "@chat-adapter/telegram": "^4.30.0",

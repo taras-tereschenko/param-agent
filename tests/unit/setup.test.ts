@@ -21,6 +21,7 @@ const answers: SetupAnswers = {
   ownerTelegramUserId: "123456789",
   telegramBotToken: "123456:secret_token",
   databaseUrl: "postgresql://param:secret@127.0.0.1:5432/param",
+  openaiApiKey: "sk-test-key",
   runtimes: ["codex", "antigravity"],
 };
 
@@ -33,6 +34,8 @@ describe("setup file generation", () => {
     expect(env).toContain(
       'DATABASE_URL="postgresql://param:secret@127.0.0.1:5432/param"',
     );
+    expect(env).toContain('OPENAI_API_KEY="sk-test-key"');
+    expect(env).toContain("PARAM_ACTOR=");
   });
 
   it("serializes env values that would otherwise break dotenv parsing", () => {

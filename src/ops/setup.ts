@@ -11,6 +11,8 @@ export type SetupAnswers = {
   ownerTelegramUserId: string;
   telegramBotToken: string;
   databaseUrl: string;
+  /** OpenAI API key for the default brain; "" when using Codex login / none. */
+  openaiApiKey: string;
   runtimes: RuntimeChoice[];
 };
 
@@ -120,6 +122,15 @@ TELEGRAM_BOT_TOKEN=${serializeEnvValue(answers.telegramBotToken)}
 
 # First trusted owner and default allowed DM user.
 PARAM_OWNER_TELEGRAM_USER_ID=${serializeEnvValue(answers.ownerTelegramUserId)}
+
+# Session Actor brain.
+# PARAM_ACTOR: auto (default) | openai | codex | mock.
+#   auto  -> OpenAI API brain when OPENAI_API_KEY is set, else the codex CLI.
+#   mock  -> deterministic actor (canned replies); only for testing.
+# In production a missing real brain refuses to start (never silently mocks).
+PARAM_ACTOR=
+OPENAI_API_KEY=${serializeEnvValue(answers.openaiApiKey)}
+PARAM_OPENAI_MODEL=
 
 # Optional runtime overrides
 CODEX_HOME=

@@ -10,10 +10,13 @@ import {
 import baseConfig from "../../param.config";
 
 describe("worker inference resolution", () => {
-  test("falls back to the MockActor when codex chat-brain is unavailable", async () => {
-    const { inference, note } = await resolveInference(baseConfig);
+  test("PARAM_ACTOR=mock selects the deterministic MockActor", async () => {
+    // Real brain is the default; the mock is opt-in only (never a silent
+    // fallback). Full selection matrix is covered in inference.test.ts.
+    const { inference } = await resolveInference(baseConfig, {
+      PARAM_ACTOR: "mock",
+    });
     expect(inference.name).toBe("mock");
-    expect(note.toLowerCase()).toContain("fallback");
     expect(inference.isAvailable()).toBe(true);
   });
 });
