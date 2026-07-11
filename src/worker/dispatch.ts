@@ -91,14 +91,36 @@ export async function dispatchOutputs(
   ctx: DispatchContext,
   drafts: ActorOutputDraft[],
 ): Promise<DispatchResult> {
+  const maxToolCalls =
+    deps.config.security?.rateLimits?.maxToolCallsPerRun ?? Number.POSITIVE_INFINITY;
+  let toolCallCount = 0;
   let ranTool = false;
   for (const draft of drafts) {
     switch (draft.type) {
-      case "tool_call":
+      case "tool_call": {
+        toolCallCount += 1;
+        if (toolCallCount > maxToolCalls) {
+          // Per-run tool-call cap reached: block the rest of this turn's calls.
+          await emitToolResult(
+            deps,
+            ctx,
+            draft.payload.toolCallId,
+            draft.payload.toolName,
+            {
+              status: "blocked",
+              error: {
+                code: "rate_limited",
+                message: `tool-call cap (${maxToolCalls}) reached for this run`,
+              },
+            },
+          );
+          break;
+        }
         if (await dispatchToolCall(deps, ctx, draft.payload)) {
           ranTool = true;
         }
         break;
+      }
       case "approval_request":
         await dispatchApprovalRequest(deps, ctx, draft.payload);
         break;
