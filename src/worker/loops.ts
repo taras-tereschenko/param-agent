@@ -19,6 +19,7 @@ import {
   type ResolvedTrustedUser,
 } from "../action-review/trusted-users";
 import { resolveApprovalResponse } from "../action-review/approval-response";
+import { parseApprovalCallback } from "../action-review/approval-buttons";
 import type { ActorRef, PlatformRef, RawPayloadRef } from "../contracts/common";
 import { idempotencyKeys } from "../contracts/ids";
 import type { TrustScope } from "../contracts/action-review";
@@ -100,6 +101,22 @@ export async function handleInbound(
   // Do not wake the actor for archived/blocked sessions.
   if (result.session.status !== "active") {
     return;
+  }
+
+  // Inline-button approval decision — bound to a specific approval id (safer
+  // than a free-text reply). Resolves that approval and executes if approved.
+  if (inbound.kind === "chat.action.callback" && source.kind === "user") {
+    const handled = await maybeHandleApprovalCallback(deps, {
+      payload: inbound.payload,
+      sessionId: result.sessionId,
+      eventId: result.eventId,
+      presser: source,
+      chatId: inbound.access.chatId,
+      topicId: inbound.access.messageThreadId,
+    });
+    if (handled) {
+      return;
+    }
   }
 
   // Trusted approve/deny replies resolve a pending approval instead of waking
@@ -221,6 +238,58 @@ async function maybeHandleApprovalReply(
     return false;
   }
 
+  if (resolution.status === "approved" && resolution.action) {
+    await executeApprovedAction(deps, ctx.sessionId, resolution.action);
+  }
+  return true;
+}
+
+/**
+ * Resolve an inline-button approval decision. The button's callback data
+ * carries the approval id, so the tap resolves EXACTLY that approval (trust +
+ * requester≠approver enforced in resolveApprovalResponse). Returns true when the
+ * callback was an approval button (consumed).
+ */
+async function maybeHandleApprovalCallback(
+  deps: WorkerDeps,
+  ctx: {
+    payload: unknown;
+    sessionId: string;
+    eventId: string;
+    presser: Extract<ActorRef, { kind: "user" }>;
+    chatId: string;
+    topicId?: string;
+  },
+): Promise<boolean> {
+  const payload = ctx.payload as {
+    actionId?: string;
+    value?: Record<string, unknown>;
+  };
+  const parsed = parseApprovalCallback(payload.actionId ?? "", payload.value);
+  if (!parsed) {
+    return false;
+  }
+  const approval = await approvalsRepository.getApprovalById(
+    deps.db,
+    parsed.approvalId,
+  );
+  if (!approval) {
+    return true; // an approval button, but the approval is gone — still consumed
+  }
+  const approverIsTrusted = isTrustedForScope(
+    ctx.presser.platformUserId,
+    approval.requiredTrustScope as TrustScope,
+    { platform: ctx.presser.platform, chatId: ctx.chatId, topicId: ctx.topicId },
+    deps.trustedUsers,
+  );
+  const resolution = await resolveApprovalResponse(deps.db, {
+    approvalId: parsed.approvalId,
+    decision: parsed.decision,
+    approver: ctx.presser,
+    approverIsTrusted,
+    decisionEventId: ctx.eventId,
+    currentProposedAction: approval.proposedAction,
+  });
   if (resolution.status === "approved" && resolution.action) {
     await executeApprovedAction(deps, ctx.sessionId, resolution.action);
   }

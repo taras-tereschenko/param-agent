@@ -40,6 +40,15 @@ export type DispatchDeps = {
   toolRegistry: ToolRegistry;
   toolHandlers: Map<string, ToolHandler>;
   taskAgentRegistry: TaskAgentRegistry;
+  /** Deliver an inline-button approval prompt to the chat (injected by the
+   *  worker; a trusted user taps Approve/Deny, resolved by approval id). */
+  sendApprovalPrompt?: (params: {
+    chatId: string;
+    messageThreadId?: string;
+    approvalId: string;
+    title: string;
+    summary: string;
+  }) => Promise<void>;
 };
 
 const log = logger.child("dispatch");
@@ -225,6 +234,13 @@ async function dispatchToolCall(
       requiredTrustScope: classification.requiredTrustScope,
       expiresAt: approvalExpiry(deps),
     });
+    await deps.sendApprovalPrompt?.({
+      chatId: ctx.platformChatId,
+      messageThreadId: ctx.messageThreadId,
+      approvalId,
+      title: `run ${def.name}`,
+      summary: payload.reason,
+    });
     await emitToolResult(deps, ctx, payload.toolCallId, def.name, {
       status: "blocked",
       error: { code: "awaiting_approval", message: decision.reason },
@@ -323,6 +339,13 @@ async function dispatchApprovalRequest(
     request: { ...payload, requiredTrustScope: scope },
     requiredTrustScope: scope,
     expiresAt: approvalExpiry(deps),
+  });
+  await deps.sendApprovalPrompt?.({
+    chatId: ctx.platformChatId,
+    messageThreadId: ctx.messageThreadId,
+    approvalId: payload.approvalId,
+    title: payload.title,
+    summary: payload.summary ?? "",
   });
 }
 

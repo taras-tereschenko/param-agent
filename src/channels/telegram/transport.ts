@@ -18,12 +18,15 @@ import {
 
 import { ParamError } from "../../shared/errors";
 
+export type InlineKeyboardButton = { text: string; callback_data: string };
+
 export type SendMessageParams = {
   chat_id: string;
   text: string;
   message_thread_id?: string;
   reply_parameters?: { message_id: number };
   parse_mode?: string;
+  reply_markup?: { inline_keyboard: InlineKeyboardButton[][] };
 };
 
 export type SetMessageReactionParams = {

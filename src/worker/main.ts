@@ -21,7 +21,8 @@ import {
   runMaintenanceOnce,
   type WorkerDeps,
 } from "./loops";
-import { buildDefaultToolset, dispatchOutputs } from "./dispatch";
+import { buildDefaultToolset, type DispatchDeps, dispatchOutputs } from "./dispatch";
+import { buildApprovalKeyboard } from "../action-review/approval-buttons";
 import { resolveTrustedUsers } from "./trusted";
 
 type StringOrRef = string | SecretRef;
@@ -65,7 +66,7 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
   const trustedUsers = resolveTrustedUsers(config);
   const toolset = buildDefaultToolset();
   const taskAgentRegistry = new TaskAgentRegistry();
-  const dispatchDeps = {
+  const dispatchDeps: DispatchDeps = {
     db,
     config,
     trustedUsers,
@@ -96,6 +97,18 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
   if (telegram?.enabled && token) {
     const transport = new BotApiTransport(token);
     const sender = new TelegramSender(transport);
+    // Deliver approval prompts as inline Approve/Deny buttons (resolved by
+    // approval id on tap — see maybeHandleApprovalCallback).
+    dispatchDeps.sendApprovalPrompt = async (p) => {
+      await transport
+        .sendMessage({
+          chat_id: p.chatId,
+          text: `${p.title}\n${p.summary}\n\nApprove this action?`,
+          message_thread_id: p.messageThreadId,
+          reply_markup: buildApprovalKeyboard(p.approvalId),
+        })
+        .catch(() => undefined);
+    };
     const accessLists: TelegramAccessLists = {
       allowedPrivateUserIds: resolveIdList(
         telegram.access.allowedPrivateUserIds,
