@@ -25,6 +25,7 @@ export type ActorTurnInput = {
   runtimeFrame?: string;
   latest?: LatestContext;
   sessionContextText?: string;
+  skillContextText?: string;
   memoryContextText?: string;
   steering?: SteeringInput[];
   knownEventIds?: string[];
@@ -77,6 +78,7 @@ export async function runActorTurn(
     styleGuard: input.styleGuard,
     approvalPolicy: input.approvalPolicy,
     sessionContextText: input.sessionContextText,
+    skillContextText: input.skillContextText,
     memoryContextText: input.memoryContextText,
     steeringText: input.steering && input.steering.length > 0
       ? renderSteering(input.steering)

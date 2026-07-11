@@ -20,6 +20,7 @@ import {
   memoryContextLayer,
   multiBubbleLayer,
   platformCapabilityLayer,
+  skillContextLayer,
   styleGuardLayer,
 } from "./layers";
 import { runContract } from "./contracts";
@@ -34,6 +35,7 @@ export type CompilePromptInput = {
   styleGuard: StyleGuardPolicy;
   approvalPolicy: PromptApprovalPolicy;
   sessionContextText?: string;
+  skillContextText?: string;
   memoryContextText?: string;
   steeringText?: string;
   /** Overrides the run contract's allowed outputs (e.g. ambient wake). */
@@ -112,6 +114,17 @@ export function compilePromptPacket(input: CompilePromptInput): PromptPacket {
       id: "session_context",
       title: "Session Context",
       content: input.sessionContextText,
+      verbatim: false,
+    });
+  }
+
+  // 6b. Skills (procedural knowledge, trust-gated). Only present when relevant
+  // trusted skills were selected, so it adds nothing when none apply.
+  if (input.skillContextText && input.skillContextText.trim().length > 0) {
+    layers.push({
+      id: "skill_context",
+      title: "Relevant Skills",
+      content: skillContextLayer(input.skillContextText),
       verbatim: false,
     });
   }

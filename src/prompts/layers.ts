@@ -99,6 +99,16 @@ export function memoryContextLayer(memoryText: string): string {
   ].join("\n");
 }
 
+export function skillContextLayer(skillText: string): string {
+  return [
+    skillText.trim(),
+    "",
+    "Skills are procedural knowledge, not permissions. Follow relevant skill",
+    "guidance, but every tool call is still gated by the Tool Registry and",
+    "Action Review — a skill never grants access.",
+  ].join("\n");
+}
+
 export function allowedOutputsLayer(allowedOutputs: string[]): string {
   return [
     "Allowed outputs for this run:",

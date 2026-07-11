@@ -139,3 +139,45 @@ describe("run contracts", () => {
     expect(packet.allowedOutputs).toEqual(["no_reply", "done"]);
   });
 });
+
+describe("skill context layer", () => {
+  test("injects a trust-gated skill layer between session and memory context", () => {
+    const packet = compilePromptPacket({
+      actorRunId: "r",
+      sessionId: "s",
+      runType: "normal_chat",
+      platformCapabilities: platform,
+      styleGuard,
+      approvalPolicy,
+      sessionContextText: "recent chat",
+      skillContextText: "Relevant skills:\n- deploy: how to ship",
+      memoryContextText: "",
+      contextRefs: { eventIds: [], memoryIds: [] },
+    });
+    const skill = packet.layers.find((l) => l.id === "skill_context");
+    expect(skill).toBeDefined();
+    expect(skill?.content).toContain("deploy: how to ship");
+    // Trust reminder is always attached so a skill can't read as a grant.
+    expect(skill?.content).toContain("Action Review");
+    const sessionIdx = packet.layers.findIndex((l) => l.id === "session_context");
+    const skillIdx = packet.layers.findIndex((l) => l.id === "skill_context");
+    const memoryIdx = packet.layers.findIndex((l) => l.id === "memory_context");
+    expect(skillIdx).toBeGreaterThan(sessionIdx);
+    expect(memoryIdx).toBeGreaterThan(skillIdx);
+  });
+
+  test("omits the skill layer when no relevant skills apply", () => {
+    const packet = compilePromptPacket({
+      actorRunId: "r",
+      sessionId: "s",
+      runType: "normal_chat",
+      platformCapabilities: platform,
+      styleGuard,
+      approvalPolicy,
+      skillContextText: "",
+      memoryContextText: "",
+      contextRefs: { eventIds: [], memoryIds: [] },
+    });
+    expect(packet.layers.some((l) => l.id === "skill_context")).toBe(false);
+  });
+});

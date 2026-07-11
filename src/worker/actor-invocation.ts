@@ -8,9 +8,11 @@ import {
   eventsRepository,
   runsRepository,
   sessionsRepository,
+  skillsRepository,
 } from "../db/repositories";
 import { retrieveMemories } from "../memory/retrieve";
 import { buildMemoryContextText } from "../memory/review";
+import { selectRelevantSkills, buildSkillContextText } from "../skills/loader";
 import { renderUi } from "../ui/renderer";
 import { ingestInternalEvent } from "../orchestrator/router";
 import { startActorRun } from "../orchestrator/run-queue";
@@ -188,6 +190,30 @@ export async function runActorInvocation(
       });
     }
 
+    // Trust-gated skills: inject only trusted+enabled skills relevant to the
+    // latest message as procedural knowledge (summaries first). Best-effort —
+    // a skills query failure never blocks a turn, and the layer is omitted when
+    // nothing relevant is trusted/enabled.
+    let skillContextText = "";
+    try {
+      const query = ctx.latest?.text ?? "";
+      if (query.trim().length > 0) {
+        const skills = await skillsRepository.listEnabledTrustedSkills(db);
+        const relevant = selectRelevantSkills(query, skills, 3);
+        skillContextText = buildSkillContextText(
+          relevant.map((skill) => ({
+            slug: skill.slug,
+            summary: skill.summary ?? skill.name,
+          })),
+        );
+      }
+    } catch (error) {
+      logger.warn("skill selection failed", {
+        sessionId: run.sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     // Steering: same-session messages that arrived AFTER this run's trigger are
     // steering signals — a hard control ("stop"/"cancel") interrupts and drops
     // stale visible output; strong steering forces a pre-send refresh.
@@ -223,6 +249,7 @@ export async function runActorInvocation(
       approvalPolicy: approvalPolicyFromConfig(deps.config),
       latest: ctx.latest,
       sessionContextText: ctx.sessionContextText,
+      skillContextText,
       memoryContextText,
       steering: steering.length > 0 ? steering : undefined,
       knownEventIds: ctx.knownEventIds,
