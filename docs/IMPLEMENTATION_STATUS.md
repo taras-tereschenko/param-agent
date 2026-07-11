@@ -4,82 +4,105 @@ The subsystem docs describe the **target** architecture. This file records what
 is actually **wired into the live loop** versus what is **staged** or blocked,
 so the docs and the code are never in conflict.
 
-Last updated during the "complete production-ready" build push (post fleet
-review). Where something can only be proven on a live VPS, that is stated.
+Where something can only be proven on a live VPS (real Telegram, a real runtime
+CLI, an MCP server, an embedding provider), that is stated explicitly.
 
 ## Wired and working end to end
 
 - **Real brain by default.** The OpenAI API brain (`OpenAiApiActor`, AI SDK
   `generateObject`) is the default; `MockActor` runs ONLY with
   `PARAM_ACTOR=mock`; production **refuses to boot** with no real brain (never a
-  silent mock). Codex-CLI brain is an alternative (subscription/API key), spawned
-  with a scrubbed env.
+  silent mock). Codex-CLI brain is an alternative, spawned with a scrubbed env.
 - **The actor ACTS.** The brain emits the full output set — message,
   react_to_message, no_reply, tool_call, spawn_task_agent, memory_candidate,
-  run_summary, done — mapped to validated drafts. The output dispatcher routes
-  tool_call (classify → auto-review vs approval → executor → `tool.result`),
-  spawn_task_agent, and memory_candidate.
+  render_ui, run_summary, done. The dispatcher routes tool_call (classify →
+  auto-review vs approval → executor → `tool.result`), spawn_task_agent, and
+  memory_candidate.
 - **Agentic loop is closed.** A tool that executes re-wakes the actor
-  (depth-bounded) so it observes `tool.result` and continues; approved-action
+  (depth-bounded) so it observes `tool.result` and continues; approved actions
   and task results re-wake it too.
-- **Memory is stored.** memory_candidate outputs pass review and are written
-  (scope-isolated); retrieval is scope + keyword + recency.
+- **Tools execute with rate limits.** Consequential tools go through Action
+  Review; `maxToolCallsPerRun` caps tool calls per run (when configured).
+- **Task agents EXECUTE.** `spawn_task_agent` builds a bounded plan, creates an
+  isolated child session + `task_runs` row, and the worker runs the task on the
+  runtime CLI (codex/opencode `exec`) with a hard budget timeout, a scrubbed env
+  (no DATABASE_URL / bot token), and an isolated workspace cwd. The real
+  outcome (status/summary/error — never a fabricated success) is written back
+  and re-wakes the parent actor. No runtime available → honest failed result.
+- **Approvals are delivered + resolved by inline button.** The trusted approver
+  gets an inline Approve/Deny keyboard bound to the approval id; taps resolve
+  it (requester ≠ approver + trust enforced); text replies also work; overdue
+  approvals expire on the maintenance tick.
+- **Generated UI is delivered.** `render_ui` is validated, rendered, and sent to
+  Telegram as text + inline buttons (64-byte-capped callbacks); button taps wake
+  the actor. Mini-app surfaces are marked delivered (the page needs HTTPS
+  hosting to be opened — see below).
+- **Memory is stored + scoped-retrieved.** memory_candidate outputs pass review
+  and are written (scope-isolated). Retrieval pushes the (scope, subject_ref)
+  allow-list + LIMIT into SQL (subject_ref GIN index) so a DM/group fetches only
+  its own rows; keyword + confidence + recency ranking; user-scoped memory is
+  retrieved in DMs.
+- **Skills reach the actor (trust-gated).** Trusted+enabled skills relevant to
+  the message are injected as procedural knowledge (summaries first) with a
+  standing "not a permission" reminder. (Populating the skills table has no
+  seed UI yet — see below.)
+- **Webhook intake works.** The webhook route validates the secret then enqueues
+  the update; the worker normalizes + access-checks + ingests it through the
+  SAME path as polling (dedupe shared). Polling remains the turnkey default.
 - **Live steering.** Same-session messages after the trigger are classified;
-  hard controls ("stop"/"cancel") interrupt and drop stale output; strong
-  steering suppresses the stale reply and refreshes against the newest message.
-- **Proactive scheduler.** The worker maintenance tick fires due schedules
-  (cooldown/active-hours/flood gated) → dedupe-keyed `ambient_wake` jobs →
-  actor reads the room; schedule next-fire is advanced.
+  hard controls interrupt and drop stale output; strong steering suppresses the
+  stale reply and refreshes against the newest message.
+- **Proactive scheduler.** The maintenance tick fires due schedules
+  (cooldown/active-hours/flood gated) → dedupe-keyed `ambient_wake` → the actor
+  reads the room; next-fire advanced.
 - Config load/validation + secret refs; verbatim human-text persona (byte-for-
   byte); prompt compiler + per-run contracts; output validation + style guard.
 - Orchestrator: deterministic session keys, batching, one active run/session,
   advisory locks, reboot/crash recovery with leases; **no duplicate delivery**
-  (delivery gated on insert) and **crash re-drive** of pending replies.
-- Telegram ingest (dedupe + raw payloads) and delivery (text/reactions, 4096-
-  safe, callback answering); access policy; **group @mentions/replies detected**
-  (bot identity wired); edited-message timestamps use edit time.
-- Action Review: deterministic risk classification, trust-scope, exact-proposal
-  + replay-safe approvals, **requester ≠ approver enforced**, the
-  require-approval flag **actually lowers the auto-run ceiling**.
-- Security: codex-brain env scrubbed (no secret exfil), HTTP surface bound to
-  loopback by default + operator bearer-token guard, DB-cred redaction (any
-  length), webhook secret validated, **Tailscale installed by default**, systemd
-  sandboxing.
-- DB schema + migrations + pgvector/FTS/GIN bootstrap; `db:check`.
-- Turnkey one-command installer (deps/bun/Postgres+pgvector/Codex/Tailscale,
-  generated DB password, provision + migrate, brain smoke-check, systemd start).
+  (gated on insert) and **crash re-drive** of pending replies.
+- Telegram ingest (dedupe + raw payloads) and delivery (text/reactions/UI,
+  4096-safe, callback answering); access policy; group @mentions/replies
+  detected (bot identity wired); edited-message timestamps use edit time.
+- Security: codex/brain + task-agent env scrubbed (no secret exfil), HTTP
+  surface bound to loopback by default + operator bearer-token guard, DB-cred
+  redaction (any length), webhook secret validated, systemd sandboxing.
+- DB schema + migrations + pgvector/FTS/GIN bootstrap (`ensureSemanticIndexes`
+  runs at migrate); `db:check`.
+- **CI**: GitHub Actions runs typecheck + unit + `bash -n`, plus a Postgres
+  (pgvector) integration job (`db:migrate`/`db:check`/`test:db`).
+- Turnkey one-command installer (deps/bun/Postgres+pgvector/Codex, generated DB
+  password, provision + migrate, brain smoke-check, systemd start). **Tailscale**
+  is installed by default and connects via a **browser login link** (codex-style
+  `tailscale up`), not a pasted key.
 
 ## Staged / blocked (with the exact blocker)
 
-- **Task-agent EXECUTION.** Registry, bounded spawn plan, DB spawn, and the
-  parent re-wake on `task.result` are wired, but `task_agent_run` still returns
-  an honest `runtime_unavailable`. Blocker: `RuntimeAdapter.run` is not
-  implemented for a real runtime; needs a codex/opencode CLI proven on the host.
-- **MCP tool execution.** `McpToolSource` lists/maps tools; there is no
-  `callTool`, and MCP tools are not registered into the default toolset. Blocker:
-  needs a live MCP server to implement + verify; also needs explicit per-tool
-  risk config (the name heuristic is not trusted for execution).
-- **Approval DELIVERY + inline buttons.** Approvals are created/audited and
-  resolvable by an explicit text reply (trust-checked, requester≠approver), but
-  Param does not yet SEND the trusted approver an inline-keyboard message, and
-  callback buttons are not bound to an approval id. Blocker: inline-button
-  delivery + callback→resolve wiring; needs live Telegram to verify.
-- **Generated UI delivery.** `render_ui` validates and renders to text +
-  callbacks decode/validate, but render_ui outputs are not delivered as Telegram
-  inline keyboards / Mini App. Blocker: live Telegram + Mini App hosting.
-- **Semantic/FTS memory search.** The pgvector + tsvector columns/indexes exist
-  but retrieval is keyword-only; no query-time embeddings. Blocker: an embedding
-  provider + live pgvector query verification. Also: retrieval over-reads
-  (no subject_ref predicate/LIMIT) and user-scoped memory is not retrieved in
-  DMs — both open.
-- **Skills in context.** The trust-gated skill registry/loader is built but not
-  injected into the actor context.
-- **Webhook mode.** The route validates the secret token but does not process
-  updates (polling is the default transport). Single-poller lock + persisted
-  polling offset are not implemented (dedupe prevents dup delivery today).
-- **Rate limits.** `security.rateLimits` is defined but not enforced.
-- **CI.** No CI config; `bun run check` (typecheck + unit) is the automated gate;
-  the DB-backed integration tests require `PARAM_TEST_DATABASE_URL`.
+- **Semantic VECTOR memory search.** Scoped keyword retrieval + the FTS
+  (`search_vector`) and pgvector (ivfflat) indexes are in place, but retrieval
+  does not yet embed the query and run a `<->` search, and embeddings are not
+  written on store. Blocker: wire an embedding provider (OpenAI embeddings)
+  into store + query, and backfill existing rows. Needs the live embeddings API
+  to verify ranking quality.
+- **Skill seeding.** The injection mechanism + data-access layer are wired, but
+  no install/seed path populates the `skills` table (the skills.sh client is a
+  seam). Blocker: a skill install/index flow (and content) to make skills
+  appear in context.
+- **MCP tool execution.** `McpToolSource.callTool` + `registerMcpTools` exist,
+  but no MCP server is configured into the default toolset by the turnkey setup.
+  Blocker: a live MCP server + explicit per-tool risk config to verify end to
+  end (the name heuristic is not trusted for execution).
+- **Mini App UI.** `render_ui` delivers to Telegram inline keyboards; the Mini
+  App page shell exists but needs public HTTPS hosting + `PARAM_PUBLIC_BASE_URL`
+  to actually open.
+- **Task-agent deep sandbox.** Env is scrubbed, the workspace cwd is isolated,
+  and the budget timeout is a hard kill; full read-only/no-net sandboxing is the
+  runtime CLI's own config (same posture as the chat brain), not enforced by
+  Param.
+- **Polling offset persistence / poller lock.** Not implemented, and not needed
+  for correctness: event dedupe prevents double-processing, and Telegram's
+  single-consumer 409 already prevents two pollers (the loop backs off on it).
+  Persisting the offset is only a minor restart optimization (deferred; needs a
+  schema migration).
 - Minor: `startActorRun` is not yet transactional/session-locked; first-reply
   latency can approach the long-poll window.
 
@@ -88,5 +111,6 @@ review). Where something can only be proven on a live VPS, that is stated.
 - The OpenAI brain producing good replies end to end on Telegram (`brain:check`
   + a real DM).
 - Codex-CLI brain output reliability (docs/CODEX_CHAT_BRAIN_PROOF.md).
-- Any of the "staged" items above that depend on live Telegram / a real
-  runtime / an MCP server / an embedding provider.
+- Task-agent execution against a real codex/opencode CLI on the host.
+- Webhook mode against a public HTTPS URL; Mini App pages likewise.
+- Anything above that depends on a live MCP server or an embedding provider.
