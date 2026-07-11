@@ -254,23 +254,48 @@ fi
 
 # 8b. Tailscale (installed by default) for private access to the box. The app
 #     endpoints stay bound to loopback; reach them over the tailnet (SSH in over
-#     Tailscale, then curl localhost). Bringing it up needs an auth key.
+#     Tailscale, then curl localhost).
+#
+#     Connecting the box uses a BROWSER LOGIN, exactly like `codex login`:
+#     `tailscale up` prints a one-time URL, you open it and approve, and the box
+#     joins your tailnet — no key to paste. An auth key is used only as a
+#     non-interactive fallback when TAILSCALE_AUTH_KEY is set (CI/automation).
 if [ "$OS" = "Linux" ]; then
   if ! command -v tailscale >/dev/null 2>&1; then
     log "installing Tailscale"
     curl -fsSL https://tailscale.com/install.sh | sh >/dev/null 2>&1 \
       || warn "could not auto-install Tailscale (see https://tailscale.com/download)"
   fi
-  if command -v tailscale >/dev/null 2>&1 && [ -f .env ]; then
-    TS_KEY="$(bun -e 'process.stdout.write((process.env.TAILSCALE_AUTH_KEY||"").trim())')"
+  if command -v tailscale >/dev/null 2>&1; then
+    TS_KEY=""
+    [ -f .env ] && TS_KEY="$(bun -e 'process.stdout.write((process.env.TAILSCALE_AUTH_KEY||"").trim())')"
     if [ -n "$TS_KEY" ]; then
-      log "connecting to your tailnet"
+      log "connecting to your tailnet (auth key)"
       $SUDO tailscale up --authkey="$TS_KEY" --hostname=param-agent >/dev/null 2>&1 \
         || warn "tailscale up failed; run 'sudo tailscale up' manually"
+      unset TS_KEY
+    elif { : </dev/tty; } 2>/dev/null; then
+      # Browser login (codex-style). Ask first — if you decline (or walk away),
+      # the install still finishes; Tailscale is optional. When you say yes we
+      # run `tailscale up` with its I/O on the terminal so the login URL is
+      # visible; it blocks until you approve in the browser.
+      printf '\nConnect this box to your Tailscale network now?\n  It prints a login link to open in your browser (just like `codex login`).\n  Optional — press Enter/N to skip and do it later. [y/N] ' >/dev/tty
+      read -r TS_ANSWER </dev/tty || TS_ANSWER=""
+      case "$TS_ANSWER" in
+        [yY]*)
+          log "starting Tailscale login — open the link it prints below"
+          if ! $SUDO tailscale up --hostname=param-agent </dev/tty >/dev/tty 2>&1; then
+            warn "tailscale login didn't complete; run 'sudo tailscale up' anytime to retry"
+          fi
+          ;;
+        *)
+          warn "skipped Tailscale — connect anytime with 'sudo tailscale up' (prints a browser login link)"
+          ;;
+      esac
+      unset TS_ANSWER
     else
-      warn "Tailscale installed; no TAILSCALE_AUTH_KEY set — connect later with 'sudo tailscale up'"
+      warn "Tailscale installed; no terminal for login — connect later with 'sudo tailscale up' (prints a browser login link)"
     fi
-    unset TS_KEY
   fi
 fi
 

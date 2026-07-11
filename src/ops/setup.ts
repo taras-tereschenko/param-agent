@@ -13,8 +13,12 @@ export type SetupAnswers = {
   databaseUrl: string;
   /** OpenAI API key for the default brain; "" when using Codex login / none. */
   openaiApiKey: string;
-  /** Tailscale auth key for private access; "" to skip / set up later. */
-  tailscaleAuthKey: string;
+  /**
+   * Optional Tailscale auth key for NON-interactive tailnet join (CI/automation).
+   * Normally left unset: the installer connects via a browser login link
+   * (`tailscale up`, codex-style), so there is nothing to paste here.
+   */
+  tailscaleAuthKey?: string;
   runtimes: RuntimeChoice[];
 };
 
@@ -145,10 +149,12 @@ PARAM_PUBLIC_BASE_URL=
 # Optional webhook secret, only required in webhook mode
 TELEGRAM_WEBHOOK_SECRET=
 
-# Private access. Tailscale is installed by default; provide an auth key to
-# join your tailnet automatically (reach the box over the tailnet — app
-# endpoints stay bound to loopback).
-TAILSCALE_AUTH_KEY=${serializeEnvValue(answers.tailscaleAuthKey)}
+# Private access. Tailscale is installed by default and connects via a browser
+# login link during install (like 'codex login') — reach the box over the
+# tailnet; app endpoints stay bound to loopback. Leave this blank for the login
+# flow. Only set an auth key for NON-interactive joins (CI/automation), or run
+# 'sudo tailscale up' anytime to (re)connect.
+TAILSCALE_AUTH_KEY=${serializeEnvValue(answers.tailscaleAuthKey ?? "")}
 
 # Optional bearer token to protect /operator/* and /health/db when the app is
 # bound to a public/Tailscale interface (PARAM_BIND_HOST). Loopback by default.
