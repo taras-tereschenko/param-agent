@@ -80,41 +80,53 @@ export class TelegramChannelAdapter {
         maxUpdateId = update.update_id;
       }
 
-      try {
-        const inbound = normalizeTelegramUpdate(update, {
-          accountId: this.opts.accountId,
-          botUserId: this.opts.botUserId,
-          botUsername: this.opts.botUsername,
-        });
-        if (!inbound) {
-          skipped += 1;
-          continue;
-        }
-
-        const decision = evaluateTelegramAccess(
-          inbound.access,
-          this.opts.accessLists,
-        );
-        if (!decision.allowed) {
-          // Both "ignore" and "audit_minimal" drop the update here. The audit
-          // sink is wired in a higher layer; the adapter never surfaces the
-          // content of unauthorized traffic.
-          skipped += 1;
-          continue;
-        }
-
-        await this.opts.onInbound(inbound, update);
+      if (await this.handleUpdate(update)) {
         handled += 1;
-      } catch (error) {
-        // One bad update must not block newer ones. Drop it (offset already
-        // advanced) and keep going.
+      } else {
         skipped += 1;
-        this.opts.onError?.(error, update);
       }
     }
 
     const nextOffset = maxUpdateId >= 0 ? maxUpdateId + 1 : (offset ?? 0);
     return { nextOffset, handled, skipped };
+  }
+
+  /**
+   * Normalize + access-check + hand off ONE update through the same pipeline as
+   * polling. Returns true when the update was handed to onInbound, false when
+   * it was skipped (unsupported, access-denied, or a non-fatal handler error).
+   * Reused by both the poll loop and the webhook intake path so there is a
+   * single normalize/access implementation.
+   */
+  async handleUpdate(update: TelegramUpdate): Promise<boolean> {
+    try {
+      const inbound = normalizeTelegramUpdate(update, {
+        accountId: this.opts.accountId,
+        botUserId: this.opts.botUserId,
+        botUsername: this.opts.botUsername,
+      });
+      if (!inbound) {
+        return false;
+      }
+
+      const decision = evaluateTelegramAccess(
+        inbound.access,
+        this.opts.accessLists,
+      );
+      if (!decision.allowed) {
+        // Both "ignore" and "audit_minimal" drop the update here. The audit
+        // sink is wired in a higher layer; the adapter never surfaces the
+        // content of unauthorized traffic.
+        return false;
+      }
+
+      await this.opts.onInbound(inbound, update);
+      return true;
+    } catch (error) {
+      // One bad update must not block newer ones. Drop it and keep going.
+      this.opts.onError?.(error, update);
+      return false;
+    }
   }
 
   async runPollingLoop(signal: AbortSignal): Promise<void> {

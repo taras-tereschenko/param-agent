@@ -2,6 +2,7 @@ import { type Context, Hono, type Next } from "hono";
 
 import { getDb } from "../db/client";
 import { checkSystemHealth } from "../ops/health";
+import { enqueueJob } from "../orchestrator/run-queue";
 
 /**
  * The Hono HTTP surface. The app process does NOT run long actor work: it
@@ -49,10 +50,12 @@ export function createApp() {
 
   // Optional Telegram webhook intake. Polling is the default transport; this
   // endpoint exists for deployments that prefer webhook mode. It acknowledges
-  // fast and relies on the worker for actor work.
+  // fast and enqueues the update for the worker, which normalizes + access-
+  // checks + ingests it through the SAME pipeline as polling (see the
+  // telegram_webhook_update job handler).
   app.post("/webhooks/telegram/:account", async (c) => {
     // Validate Telegram's secret token before doing anything, so forged updates
-    // are rejected (and so wiring the processing later can't skip this check).
+    // are rejected.
     const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
     if (
       secret &&
@@ -60,7 +63,33 @@ export function createApp() {
     ) {
       return c.json({ ok: false, error: "unauthorized" }, 401);
     }
-    await c.req.json().catch(() => ({}));
+    const account = c.req.param("account");
+    const update = (await c.req.json().catch(() => null)) as
+      | { update_id?: number }
+      | null;
+    // Ignore malformed bodies (still 200 so Telegram doesn't hammer retries).
+    if (!update || typeof update.update_id !== "number") {
+      return c.json({ ok: true });
+    }
+    try {
+      const db = await getDb();
+      await enqueueJob(
+        db,
+        "telegram_webhook_update",
+        { account, update },
+        // update_id is unique per bot, so this dedupes Telegram's retries.
+        { idempotencyKey: `telegram_webhook:${account}:${update.update_id}` },
+      );
+    } catch (error) {
+      // Report a 500 so Telegram retries later rather than dropping the update.
+      return c.json(
+        {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        500,
+      );
+    }
     return c.json({ ok: true });
   });
 

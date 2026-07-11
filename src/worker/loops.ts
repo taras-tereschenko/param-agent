@@ -47,6 +47,11 @@ export type WorkerDeps = ActorInvocationDeps & {
   answerCallback?: (callbackId: string) => Promise<void>;
   /** Runtime executors for spawned task agents (codex/opencode). */
   taskExecutors?: TaskRuntimeRegistry;
+  /**
+   * Process ONE raw Telegram update through the normalize/access/ingest
+   * pipeline (webhook intake). Wired to the adapter when polling is configured.
+   */
+  processWebhookUpdate?: (update: unknown) => Promise<void>;
 };
 
 // Explicit approval verbs only. Casual "ok"/"yes"/"no" must NOT resolve a
@@ -519,6 +524,17 @@ async function dispatchJob(
       }).catch(() => undefined);
       // Wake the parent so the actor can report the task outcome to the user.
       await wakeActorForResult(deps, parentSessionId);
+      return;
+    }
+    case "telegram_webhook_update": {
+      // Webhook intake enqueued by the app process. Normalize + access-check +
+      // ingest through the SAME adapter pipeline as polling (dedupe is handled
+      // downstream by the event dedupeKey), so webhook and polling behave
+      // identically. No-op if this worker has no Telegram adapter configured.
+      const update = job.payload.update;
+      if (update && deps.processWebhookUpdate) {
+        await deps.processWebhookUpdate(update);
+      }
       return;
     }
     default:

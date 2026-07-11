@@ -19,7 +19,8 @@ export type ParamJobType =
   | "tool_execution"
   | "delivery_retry"
   | "approval_timeout"
-  | "recovery_scan";
+  | "recovery_scan"
+  | "telegram_webhook_update";
 
 export type EnqueueOptions = {
   dueAt?: Date;

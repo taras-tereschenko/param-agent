@@ -1,5 +1,7 @@
 import { hostname } from "node:os";
 
+import type { TelegramUpdate } from "@chat-adapter/telegram";
+
 import { loadConfig } from "../config/load";
 import { resolveSecretRef } from "../config/secrets";
 import type { SecretRef } from "../config/schema";
@@ -134,6 +136,8 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
       taskExecutors,
       dispatchOutputs: dispatch,
       answerCallback: (callbackId: string) => sender.answerCallback(callbackId),
+      // Set below once the adapter exists (webhook intake reuses it).
+      processWebhookUpdate: undefined,
     };
     const workerDeps = deps;
     // Resolve the bot's identity FIRST so the normalizer can detect @mentions
@@ -155,6 +159,12 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
           error: error instanceof Error ? error.message : String(error),
         }),
     });
+    // Webhook intake (app process enqueues telegram_webhook_update) reuses the
+    // adapter's normalize/access/ingest path so both transports behave alike.
+    const webhookAdapter = adapter;
+    workerDeps.processWebhookUpdate = async (update) => {
+      await webhookAdapter.handleUpdate(update as TelegramUpdate);
+    };
     log.info("telegram polling ready", { bot: me?.username ?? "unknown" });
   } else {
     if (telegram?.enabled) {

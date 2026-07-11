@@ -366,6 +366,35 @@ describe("TelegramChannelAdapter.pollOnce", () => {
     expect(handled[0]?.access.fromUserId).toBe("111");
   });
 
+  test("handleUpdate ingests one allowed update (webhook intake path)", async () => {
+    const transport = new FakeTransport([]);
+    const handled: NormalizedInbound[] = [];
+    const adapter = new TelegramChannelAdapter({
+      accountId: ACCOUNT_ID,
+      transport,
+      accessLists: makeLists({ allowedPrivateUserIds: ["111"] }),
+      unauthorizedBehavior: "ignore",
+      botUserId: BOT_USER_ID,
+      botUsername: BOT_USERNAME,
+      async onInbound(inbound) {
+        handled.push(inbound);
+      },
+    });
+
+    const allowed = await adapter.handleUpdate(
+      privateMessageUpdate(900, "111", "hi via webhook"),
+    );
+    expect(allowed).toBe(true);
+    expect(handled).toHaveLength(1);
+
+    // Unauthorized user is dropped (not handed to onInbound).
+    const denied = await adapter.handleUpdate(
+      privateMessageUpdate(901, "222", "forbidden"),
+    );
+    expect(denied).toBe(false);
+    expect(handled).toHaveLength(1);
+  });
+
   test("sender delivers text through the transport", async () => {
     const transport = new FakeTransport([]);
     const adapter = new TelegramChannelAdapter({
