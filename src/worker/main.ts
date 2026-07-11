@@ -79,13 +79,30 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
     resolveMaybe(value as StringOrRef),
   );
   if (mcpEntries.length > 0) {
-    await registerMcpServers(toolset.registry, toolset.handlers, mcpEntries).catch(
-      (error) =>
-        log.warn("MCP registration failed", {
-          error: error instanceof Error ? error.message : String(error),
+    // Bound registration: a stdio server that starts but stalls on the MCP
+    // handshake would otherwise hang worker boot forever (connect never
+    // resolves). On timeout we log and proceed WITHOUT those tools rather than
+    // wedging the whole worker.
+    const MCP_REGISTER_TIMEOUT_MS = 15_000;
+    let mcpTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        registerMcpServers(toolset.registry, toolset.handlers, mcpEntries),
+        new Promise<never>((_, reject) => {
+          mcpTimer = setTimeout(
+            () => reject(new Error("MCP registration timed out")),
+            MCP_REGISTER_TIMEOUT_MS,
+          );
         }),
-    );
-    log.info("MCP servers registered", { count: mcpEntries.length });
+      ]);
+      log.info("MCP servers registered", { count: mcpEntries.length });
+    } catch (error) {
+      log.warn("MCP registration skipped", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      if (mcpTimer) clearTimeout(mcpTimer);
+    }
   }
   const taskAgentRegistry = new TaskAgentRegistry();
   // Runtime executors for spawned task agents (codex/opencode CLI, scrubbed env).

@@ -4,6 +4,7 @@ import type { ParamDb } from "../db/client";
 import { memoryRecords } from "../db/schema";
 import type { MemoryScope, MemorySubjectRef, MemoryView } from "../contracts/memory";
 import { logger } from "../observability/logger";
+import { MEMORY_EMBEDDING_DIM } from "../db/schema/extended";
 import type { MaybeEmbeddingProvider } from "./embeddings";
 import { rankMemories, type RankableMemory } from "./rank";
 import {
@@ -90,8 +91,15 @@ export async function retrieveMemories(
   if (provider && query.trim().length > 0) {
     try {
       const [vec] = await provider.embed([query]);
-      if (vec && vec.length > 0) {
+      // Match the column width or skip vector search (keyword fallback) — a
+      // mismatched vector would error in the `<=>` distance operator.
+      if (vec && vec.length === MEMORY_EMBEDDING_DIM) {
         vecLiteral = `[${vec.join(",")}]`;
+      } else if (vec && vec.length > 0) {
+        logger.child("memory").warn("query embedding dimension mismatch; keyword fallback", {
+          got: vec.length,
+          expected: MEMORY_EMBEDDING_DIM,
+        });
       }
     } catch (error) {
       logger.child("memory").warn("query embed failed; keyword fallback", {

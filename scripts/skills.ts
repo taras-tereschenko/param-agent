@@ -23,9 +23,10 @@ const USAGE = [
   "Usage:",
   "  bun run skills list",
   "  bun run skills add <slug> <name> [--summary <text>] [--source <s>] [--trust <status>] [--enable]",
-  "  bun run skills trust <slug> <trusted|untrusted|blocked>",
-  "  bun run skills enable <slug>",
-  "  bun run skills disable <slug>",
+  "  bun run skills trust <slug> <trusted|untrusted|blocked> [--source <s>]",
+  "  bun run skills enable <slug> [--source <s>]",
+  "  bun run skills disable <slug> [--source <s>]",
+  "  (--source defaults to \"local\")",
 ].join("\n");
 
 const TRUST_VALUES: SkillTrustStatus[] = ["trusted", "untrusted", "blocked"];
@@ -89,25 +90,54 @@ async function run(db: ParamDb, argv: string[]): Promise<number> {
   }
 
   if (command === "trust") {
-    const slug = argv[1];
-    const status = argv[2];
+    const { values, positionals } = parseArgs({
+      args: argv.slice(1),
+      allowPositionals: true,
+      options: { source: { type: "string" } },
+    });
+    const slug = positionals[0];
+    const status = positionals[1];
+    const source = values.source ?? "local";
     if (!slug || !status || !isTrust(status)) {
-      console.error("trust requires <slug> <trusted|untrusted|blocked>");
+      console.error("trust requires <slug> <trusted|untrusted|blocked> [--source <s>]");
       return 1;
     }
-    await skillsRepository.setTrust(db, slug, status);
-    console.log(`skill "${slug}" trust set to ${status}`);
+    const changed = await skillsRepository.setTrust(db, source, slug, status);
+    if (changed === 0) {
+      console.error(`no skill "${slug}" from source "${source}"`);
+      return 1;
+    }
+    console.log(`skill "${slug}" (${source}) trust set to ${status}`);
     return 0;
   }
 
   if (command === "enable" || command === "disable") {
-    const slug = argv[1];
+    const { values, positionals } = parseArgs({
+      args: argv.slice(1),
+      allowPositionals: true,
+      options: { source: { type: "string" } },
+    });
+    const slug = positionals[0];
+    const source = values.source ?? "local";
     if (!slug) {
-      console.error(`${command} requires <slug>`);
+      console.error(`${command} requires <slug> [--source <s>]`);
       return 1;
     }
-    await skillsRepository.setEnabled(db, slug, command === "enable");
-    console.log(`skill "${slug}" ${command}d`);
+    const changed = await skillsRepository.setEnabled(
+      db,
+      source,
+      slug,
+      command === "enable",
+    );
+    if (changed === 0) {
+      console.error(
+        command === "enable"
+          ? `could not enable "${slug}" (${source}) — is it installed and trusted?`
+          : `no skill "${slug}" from source "${source}"`,
+      );
+      return 1;
+    }
+    console.log(`skill "${slug}" (${source}) ${command}d`);
     return 0;
   }
 

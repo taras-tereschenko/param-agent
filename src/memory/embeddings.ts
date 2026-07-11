@@ -48,7 +48,13 @@ export class OpenAiEmbeddingProvider implements EmbeddingProvider {
     if (texts.length === 0) {
       return [];
     }
-    const { embeddings } = await embedMany({ model: this.model, values: texts });
+    // Request the configured output dimension so text-embedding-3-* models emit
+    // vectors that match the fixed DB column width (callers still guard length).
+    const { embeddings } = await embedMany({
+      model: this.model,
+      values: texts,
+      providerOptions: { openai: { dimensions: this.dimensions } },
+    });
     return embeddings;
   }
 }

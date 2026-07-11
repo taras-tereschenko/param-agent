@@ -9,6 +9,7 @@ import type {
   MemorySubjectRef,
 } from "../contracts/memory";
 import { logger } from "../observability/logger";
+import { MEMORY_EMBEDDING_DIM } from "../db/schema/extended";
 import type { MaybeEmbeddingProvider } from "./embeddings";
 
 export type StoreMemoryInput = {
@@ -37,8 +38,16 @@ export async function storeMemory(
   if (embedProvider) {
     try {
       const [vec] = await embedProvider.embed([input.text]);
-      if (vec && vec.length > 0) {
+      // Only store a vector whose width matches the fixed column, or the insert
+      // would throw (pgvector dimension mismatch) and fail the whole run. A
+      // mismatch (misconfigured model) degrades to no-vector, keeping FTS/keyword.
+      if (vec && vec.length === MEMORY_EMBEDDING_DIM) {
         embedding = vec;
+      } else if (vec && vec.length > 0) {
+        logger.child("memory").warn("embedding dimension mismatch; storing without vector", {
+          got: vec.length,
+          expected: MEMORY_EMBEDDING_DIM,
+        });
       }
     } catch (error) {
       logger.child("memory").warn("embed-on-write failed; storing without vector", {

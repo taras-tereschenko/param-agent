@@ -112,14 +112,17 @@ export const skillsRepository = {
   },
 
   /**
-   * Set trust. Losing trust also disables the skill (enabled implies trusted).
+   * Set trust for a specific (source, slug) — slug alone is NOT unique. Losing
+   * trust also disables the skill (enabled implies trusted). Returns the number
+   * of rows changed so the caller can report "no such skill".
    */
   async setTrust(
     db: ParamDb,
+    source: string,
     slug: string,
     trustStatus: SkillTrustStatus,
-  ): Promise<void> {
-    await db
+  ): Promise<number> {
+    const rows = await db
       .update(skills)
       .set({
         trustStatus,
@@ -127,22 +130,28 @@ export const skillsRepository = {
         updatedAt: new Date(),
         ...(trustStatus === "trusted" ? {} : { enabled: "false" }),
       })
-      .where(eq(skills.slug, slug));
+      .where(and(eq(skills.source, source), eq(skills.slug, slug)))
+      .returning({ slug: skills.slug });
+    return rows.length;
   },
 
-  /** Enable/disable a skill. Enabling only takes effect when trusted. */
-  async setEnabled(db: ParamDb, slug: string, enabled: boolean): Promise<void> {
-    if (!enabled) {
-      await db
-        .update(skills)
-        .set({ enabled: "false", updatedAt: new Date() })
-        .where(eq(skills.slug, slug));
-      return;
-    }
-    // Only enable trusted skills (enabled implies trusted).
-    await db
+  /**
+   * Enable/disable a specific (source, slug). Enabling only takes effect when
+   * the skill is trusted. Returns rows changed (0 = no match / not trusted).
+   */
+  async setEnabled(
+    db: ParamDb,
+    source: string,
+    slug: string,
+    enabled: boolean,
+  ): Promise<number> {
+    const base = and(eq(skills.source, source), eq(skills.slug, slug));
+    const rows = await db
       .update(skills)
-      .set({ enabled: "true", updatedAt: new Date() })
-      .where(and(eq(skills.slug, slug), eq(skills.trustStatus, "trusted")));
+      .set({ enabled: enabled ? "true" : "false", updatedAt: new Date() })
+      // Only enable trusted skills (enabled implies trusted); disable always ok.
+      .where(enabled ? and(base, eq(skills.trustStatus, "trusted")) : base)
+      .returning({ slug: skills.slug });
+    return rows.length;
   },
 };
