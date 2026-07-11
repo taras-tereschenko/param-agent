@@ -58,12 +58,23 @@ export const bunCliRunner: CliRunner = async (input) => {
     cwd: input.cwd,
     env: input.env,
   });
+  // On timeout send SIGTERM, then escalate to SIGKILL if the child ignores it —
+  // otherwise a stuck child leaves `proc.exited` pending forever and hangs the
+  // caller (the worker's job loop).
+  let killTimer: ReturnType<typeof setTimeout> | undefined;
   const timer = setTimeout(() => {
     try {
       proc.kill();
     } catch {
       /* already exited */
     }
+    killTimer = setTimeout(() => {
+      try {
+        proc.kill("SIGKILL");
+      } catch {
+        /* already exited */
+      }
+    }, 2_000);
   }, input.timeoutMs);
   try {
     const [stdout, stderr, exitCode] = await Promise.all([
@@ -74,6 +85,7 @@ export const bunCliRunner: CliRunner = async (input) => {
     return { stdout, stderr, exitCode };
   } finally {
     clearTimeout(timer);
+    if (killTimer) clearTimeout(killTimer);
   }
 };
 

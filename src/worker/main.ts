@@ -184,16 +184,37 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
     };
   }
 
+  // Only long-poll in polling mode. In webhook mode the app process feeds
+  // updates via telegram_webhook_update jobs, and calling getUpdates would hit
+  // Telegram's single-consumer 409 (a webhook is registered). The adapter is
+  // still built (its handleUpdate powers webhook intake).
+  const pollAdapter =
+    adapter && telegramAccount?.mode !== "webhook" ? adapter : undefined;
+  if (adapter && !pollAdapter) {
+    log.info("telegram webhook mode: long-polling disabled; draining jobs");
+  }
+
   let offset: number | undefined;
   let lastMaintenanceMs = 0;
   log.info("worker started", { workerId });
 
   while (!signal.aborted) {
-    try {
-      if (adapter) {
-        const poll = await adapter.pollOnce(offset);
+    // Poll step is isolated: a getUpdates failure (409/429/revoked token/blip)
+    // must NOT skip job processing below, or the whole worker wedges (webhook
+    // jobs, deliveries, actor runs would never drain).
+    let pollFailed = false;
+    if (pollAdapter) {
+      try {
+        const poll = await pollAdapter.pollOnce(offset);
         offset = poll.nextOffset;
+      } catch (error) {
+        pollFailed = true;
+        log.error("telegram poll error", {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
+    }
+    try {
       let processed = true;
       while (processed && !signal.aborted) {
         processed = await runJobsOnce(deps);
@@ -204,16 +225,19 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
         await runMaintenanceOnce(deps);
       }
     } catch (error) {
-      log.error("worker loop error", {
+      log.error("worker job loop error", {
         error: error instanceof Error ? error.message : String(error),
       });
-      // Back off on error so a persistent failure (revoked token, 429, DB
-      // blip) cannot busy-spin the loop and hammer the API/CPU.
       await sleep(2_000, signal);
       continue;
     }
-    if (!adapter) {
+    // Pacing: an active long-poll already blocks ~30s. Without one (webhook mode
+    // or no adapter) poll jobs on a short timer; after a poll failure back off
+    // so a persistent transport error can't busy-spin.
+    if (!pollAdapter) {
       await sleep(1_000, signal);
+    } else if (pollFailed) {
+      await sleep(2_000, signal);
     }
   }
 

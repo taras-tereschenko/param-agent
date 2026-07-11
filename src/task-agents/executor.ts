@@ -185,22 +185,33 @@ export function buildTaskExecutors(
   const executors: TaskRuntimeExecutor[] = [];
   const scrubbed = scrubbedCliEnv(env);
   const runtimes = config.runtimes ?? {};
+  // Non-interactive subcommand per runtime (codex `exec`, opencode `run`).
+  const defaultArgs: Record<string, string[]> = {
+    codex: ["exec"],
+    opencode: ["run"],
+  };
 
   for (const runtime of ["codex", "opencode"] as const) {
     const rt = runtimes[runtime];
-    // direct-cli runtimes carry a `command`; harness-mode runtimes do not and
-    // are not task executors here.
-    if (rt && rt.enabled && "command" in rt && rt.command) {
-      executors.push(
-        new CliTaskExecutor({
-          runtime,
-          command: rt.command,
-          args: rt.args,
-          env: scrubbed,
-          cwd: "workspacesDir" in rt ? rt.workspacesDir : undefined,
-        }),
-      );
+    if (!rt || !rt.enabled || !("command" in rt) || !rt.command) {
+      continue;
     }
+    // Only DIRECT-CLI runtimes are spawned raw here. A harness/sandboxed
+    // runtime (adapter "ai-sdk-harness") must NOT be run raw — that would
+    // bypass its sandbox — so it has no task executor until harness execution
+    // is wired.
+    if ("adapter" in rt && rt.adapter === "ai-sdk-harness") {
+      continue;
+    }
+    executors.push(
+      new CliTaskExecutor({
+        runtime,
+        command: rt.command,
+        args: rt.args ?? defaultArgs[runtime],
+        env: scrubbed,
+        cwd: "workspacesDir" in rt ? rt.workspacesDir : undefined,
+      }),
+    );
   }
 
   return new TaskRuntimeRegistry(executors);

@@ -531,6 +531,17 @@ async function dispatchJob(
       // ingest through the SAME adapter pipeline as polling (dedupe is handled
       // downstream by the event dedupeKey), so webhook and polling behave
       // identically. No-op if this worker has no Telegram adapter configured.
+      const account = job.payload.account as string | undefined;
+      // The adapter is bound to THIS worker's account (its access lists +
+      // accountId). Never route another account's update through it, or access
+      // decisions/session routing would be attributed to the wrong account.
+      if (account !== undefined && account !== deps.accountLabel) {
+        logger.warn("webhook update for a different account; skipping", {
+          account,
+          expected: deps.accountLabel,
+        });
+        return;
+      }
       const update = job.payload.update;
       if (update && deps.processWebhookUpdate) {
         await deps.processWebhookUpdate(update);
