@@ -5,6 +5,8 @@ import {
   type ToolRiskLevel,
 } from "../../contracts/tool";
 import { ParamError } from "../../shared/errors";
+import type { ToolHandler } from "../executor";
+import type { ToolRegistry } from "../registry";
 
 export interface McpServerConfig {
   name: string;
@@ -33,8 +35,14 @@ export interface McpToolLike {
 interface McpClientLike {
   connect(transport: unknown): Promise<void>;
   listTools(): Promise<{ tools?: McpToolLike[] }>;
+  callTool(params: {
+    name: string;
+    arguments?: Record<string, unknown>;
+  }): Promise<{ content?: unknown; isError?: boolean }>;
   close(): Promise<void>;
 }
+
+export type McpCallResult = { content: unknown; isError: boolean };
 
 /**
  * Heuristic for tool names that are safe to treat as read-only, e.g.
@@ -125,6 +133,31 @@ export class McpToolSource {
     }
   }
 
+  /**
+   * Execute an MCP tool. `toolName` is the Param-qualified name
+   * (`<server>.<tool>`) or the bare MCP tool name; the server prefix is
+   * stripped before the call.
+   */
+  async callTool(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<McpCallResult> {
+    const prefix = `${this.config.name}.`;
+    const bareName = toolName.startsWith(prefix)
+      ? toolName.slice(prefix.length)
+      : toolName;
+    try {
+      const client = await this.ensureConnected();
+      const result = await client.callTool({ name: bareName, arguments: args });
+      return {
+        content: result.content ?? result,
+        isError: result.isError === true,
+      };
+    } catch (error) {
+      throw wrapMcpError(this.config.name, "callTool", error);
+    }
+  }
+
   async close(): Promise<void> {
     const client = this.client;
     this.client = undefined;
@@ -135,6 +168,66 @@ export class McpToolSource {
       await client.close();
     } catch (error) {
       throw wrapMcpError(this.config.name, "close", error);
+    }
+  }
+}
+
+/** What registerMcpTools needs from a source (McpToolSource satisfies it). */
+export interface McpSourceLike {
+  listTools(): Promise<ToolDefinition[]>;
+  callTool(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<McpCallResult>;
+}
+
+/**
+ * List each MCP source's tools and register them into the toolset with a handler
+ * that executes via callTool. A bad server is skipped (never breaks the toolset).
+ * `riskOverrides` sets an EXPLICIT per-tool risk (keyed by the qualified name),
+ * overriding the name heuristic — required before trusting an MCP tool to
+ * auto-run. Action Review still gates every consequential call.
+ */
+export async function registerMcpTools(
+  registry: ToolRegistry,
+  handlers: Map<string, ToolHandler>,
+  sources: McpSourceLike[],
+  riskOverrides: Record<string, ToolRiskLevel> = {},
+): Promise<void> {
+  for (const source of sources) {
+    let defs: ToolDefinition[];
+    try {
+      defs = await source.listTools();
+    } catch {
+      continue;
+    }
+    for (const def of defs) {
+      const override = riskOverrides[def.name];
+      const finalDef: ToolDefinition = override
+        ? {
+            ...def,
+            riskLevel: override,
+            approvalMode:
+              override === "safe_read"
+                ? ("auto_if_safe" as ToolApprovalMode)
+                : ("review" as ToolApprovalMode),
+          }
+        : def;
+      if (!registry.has(finalDef.name)) {
+        registry.register(finalDef);
+      }
+      handlers.set(finalDef.name, {
+        async execute(input: Record<string, unknown>): Promise<unknown> {
+          const result = await source.callTool(finalDef.name, input);
+          if (result.isError) {
+            throw new ParamError(
+              "runtime_unavailable",
+              `MCP tool ${finalDef.name} reported an error`,
+            );
+          }
+          return result.content;
+        },
+      });
     }
   }
 }
