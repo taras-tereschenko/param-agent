@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+
 import {
   cancel,
   confirm,
@@ -251,9 +253,23 @@ async function collectAnswers(): Promise<SetupAnswers> {
 
 async function main() {
   const hostPlatform = getSupportedHostPlatform();
-  ensureInteractiveTerminal();
 
   intro("Param setup");
+
+  // Re-run friendly: if config already exists, don't re-prompt (and don't
+  // overwrite) — just re-check runtimes. Delete .env to reconfigure.
+  if (existsSync(".env") && existsSync("param.config.local.ts")) {
+    note(
+      "Existing .env and param.config.local.ts found — keeping them.\nDelete .env to reconfigure.",
+      "config present",
+    );
+    const status = await checkSelectedRuntimes([...runtimeChoices], hostPlatform);
+    note(status, "runtime check");
+    outro("config unchanged");
+    return;
+  }
+
+  ensureInteractiveTerminal();
 
   note(
     `Detected host: ${hostPlatform}\n\nThis first setup pass creates local files only.\nIt will not install packages, create users, or start services yet.`,

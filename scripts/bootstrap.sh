@@ -244,26 +244,50 @@ SQL
   fi
 fi
 
-# 8. Chat brain: install the Codex CLI (optional — the OpenAI API brain needs no
-#    CLI, only OPENAI_API_KEY). Non-fatal; skip if already present.
+# 8. Chat brain — Codex CLI path.
+#    Param's brain is either the OpenAI API (OPENAI_API_KEY, needs no CLI) OR the
+#    Codex CLI backed by your ChatGPT/Codex subscription. When no OPENAI_API_KEY
+#    is set, Codex IS the brain, so we install it AND log you in here.
+# Make sure the codex install locations are on PATH for this shell (install
+# target + codex's own bin) so login + the brain check below can find it.
+export PATH="$HOME/.local/bin:$HOME/.codex/bin:$PATH"
 if ! command -v codex >/dev/null 2>&1; then
-  log "installing Codex CLI (optional chat brain)"
+  log "installing Codex CLI"
   # CODEX_NON_INTERACTIVE=true: the upstream installer otherwise PROMPTS
   # ("Start Codex now?") and can try to start an interactive session — wrong for
   # an unattended bootstrap. Keep stderr visible so a real failure is diagnosable
   # (we only hide stdout progress).
   if curl -fsSL https://chatgpt.com/codex/install.sh \
     | CODEX_NON_INTERACTIVE=true sh >/dev/null; then
-    # The installer drops the binary in ~/.local/bin, which may not be on PATH
-    # in this shell yet — add it so the brain check below can see codex.
-    export PATH="$HOME/.local/bin:$PATH"
+    export PATH="$HOME/.local/bin:$HOME/.codex/bin:$PATH"
     if command -v codex >/dev/null 2>&1; then
-      log "codex installed ($(command -v codex)); run 'codex login' to use it as the brain"
+      log "codex installed ($(command -v codex))"
     else
       warn "codex installer ran but 'codex' is not on PATH; add ~/.local/bin to PATH"
     fi
   else
-    warn "could not auto-install Codex; the OpenAI API brain (OPENAI_API_KEY) does not need it"
+    warn "could not auto-install Codex (see the error above). Install it manually (https://github.com/openai/codex), or use the OpenAI API brain (OPENAI_API_KEY)."
+  fi
+fi
+
+# 8a. Authenticate Codex (your subscription). This is the brain when no
+#     OPENAI_API_KEY is set — a browser/device login, exactly like Tailscale:
+#     codex prints a link, you approve it, done. Skipped when an OpenAI key is
+#     configured (that brain needs no login) or already authenticated.
+HAS_OPENAI_KEY=""
+if bun -e 'process.exit((process.env.OPENAI_API_KEY||"").trim()?0:1)' >/dev/null 2>&1; then
+  HAS_OPENAI_KEY=1
+fi
+if command -v codex >/dev/null 2>&1 && [ -z "$HAS_OPENAI_KEY" ]; then
+  if codex login status >/dev/null 2>&1; then
+    log "codex already authenticated"
+  elif { : </dev/tty; } 2>/dev/null; then
+    log "logging in to Codex — open the link it prints below (your ChatGPT/Codex subscription)"
+    if ! codex login </dev/tty >/dev/tty 2>&1; then
+      warn "codex login didn't complete; run 'codex login' in $TARGET_DIR, then: ${SUDO:+$SUDO }systemctl restart param-worker param-app"
+    fi
+  else
+    warn "no terminal for codex login; run 'codex login' in $TARGET_DIR, then start the services"
   fi
 fi
 
@@ -323,6 +347,11 @@ if command -v systemctl >/dev/null 2>&1 && [ -f .env ] \
   RUN_USER="$(id -un)"
   BUN_BIN="$BUN_INSTALL/bin/bun"
   SVC_PATH="$BUN_INSTALL/bin:$HOME/.codex/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
+  # The codex brain reads its subscription auth from CODEX_HOME (~/.codex).
+  # systemd does not reliably set HOME for services, so set both explicitly or
+  # the service's `codex exec` can't find the login and stays mute.
+  RUN_HOME="$HOME"
+  CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
   HAS_BRAIN=""
   if bun -e 'process.exit((process.env.OPENAI_API_KEY||"").trim()?0:1)' >/dev/null 2>&1; then
     HAS_BRAIN=1
@@ -339,6 +368,8 @@ Wants=network-online.target
 User=$RUN_USER
 WorkingDirectory=$TARGET_DIR
 Environment=PATH=$SVC_PATH
+Environment=HOME=$RUN_HOME
+Environment=CODEX_HOME=$CODEX_HOME_DIR
 ExecStart=$BUN_BIN run start:worker
 Restart=on-failure
 RestartSec=5
@@ -361,6 +392,8 @@ Wants=network-online.target
 User=$RUN_USER
 WorkingDirectory=$TARGET_DIR
 Environment=PATH=$SVC_PATH
+Environment=HOME=$RUN_HOME
+Environment=CODEX_HOME=$CODEX_HOME_DIR
 Environment=PORT=8080
 ExecStart=$BUN_BIN run start
 Restart=on-failure
@@ -377,28 +410,24 @@ UNIT
   $SUDO systemctl daemon-reload >/dev/null 2>&1 || true
   $SUDO systemctl enable param-worker param-app >/dev/null 2>&1 || true
   if [ -n "$HAS_BRAIN" ]; then
-    # If an OpenAI key is configured, verify the brain actually replies BEFORE
-    # starting, so a bad key/model surfaces now (with the real error) instead of
-    # a silent, mute service. (Codex-subscription path may need `codex login`
-    # first, so it isn't gated here.)
-    BRAIN_OK=1
-    if bun -e 'process.exit((process.env.OPENAI_API_KEY||"").trim()?0:1)' >/dev/null 2>&1; then
-      log "verifying the brain replies"
-      if ! bun run brain:check; then
-        BRAIN_OK=""
-        warn "brain check failed (see the error above) — services installed but NOT started. Fix OPENAI_API_KEY / PARAM_OPENAI_MODEL in $TARGET_DIR/.env, then: ${SUDO:+$SUDO }systemctl start param-worker param-app"
-      fi
-    fi
-    if [ -n "$BRAIN_OK" ]; then
+    # Verify the brain actually replies BEFORE starting — for BOTH paths (OpenAI
+    # key AND the codex subscription). brain:check runs the same actor a real
+    # turn would (codex exec / OpenAI) and fails loudly if it can't produce a
+    # message, so a mute/misconfigured brain surfaces now with the real error
+    # instead of a silently dead service.
+    log "verifying the brain replies (this runs your codex/OpenAI brain once)"
+    if bun run brain:check; then
       if $SUDO systemctl restart param-worker param-app; then
         SERVICES_UP=1
         log "Param services started (param-worker + param-app)"
       else
         warn "services installed but failed to start; check 'journalctl -u param-worker -e'"
       fi
+    else
+      warn "brain check failed (see the error above) — services installed but NOT started. Fix the brain (run 'codex login', or set OPENAI_API_KEY/PARAM_OPENAI_MODEL in $TARGET_DIR/.env), then: ${SUDO:+$SUDO }systemctl start param-worker param-app"
     fi
   else
-    warn "no brain configured yet — set OPENAI_API_KEY in $TARGET_DIR/.env (or run 'codex login'), then: ${SUDO:+$SUDO }systemctl start param-worker param-app"
+    warn "no brain configured — install + 'codex login' the Codex CLI, or set OPENAI_API_KEY in $TARGET_DIR/.env, then: ${SUDO:+$SUDO }systemctl start param-worker param-app"
   fi
 fi
 
