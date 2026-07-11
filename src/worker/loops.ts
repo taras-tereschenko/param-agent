@@ -2,10 +2,16 @@ import {
   approvalsRepository,
   jobsRepository,
   runsRepository,
+  schedulesRepository,
 } from "../db/repositories";
 import type { NormalizedInbound } from "../channels";
 import { ingestInboundEvent, ingestInternalEvent } from "../orchestrator/router";
-import { startActorRun } from "../orchestrator/run-queue";
+import {
+  enqueueJob,
+  startActorRun,
+  type ParamJobType,
+} from "../orchestrator/run-queue";
+import { fireDueSchedules } from "../scheduler/due-jobs";
 import { buildTelegramSessionRoute } from "../orchestrator/session-resolver";
 import { defaultBatchPolicy, isDirectlyAddressed } from "../orchestrator/batching";
 import {
@@ -399,7 +405,46 @@ async function dispatchJob(
   }
 }
 
-/** Periodic maintenance: expire overdue approvals. */
+/** Periodic maintenance: expire overdue approvals + fire due proactive wakes. */
 export async function runMaintenanceOnce(deps: WorkerDeps): Promise<void> {
   await approvalsRepository.expireDueApprovals(deps.db);
+  await fireScheduledWakes(deps);
+}
+
+/**
+ * Fire proactive schedules whose time has come: enqueue an ambient_wake job
+ * (dedupe-keyed) for each allowed schedule, then advance its next fire time.
+ * The ambient_wake handler persists a wake event and lets the actor read the
+ * room (it may still stay quiet).
+ */
+async function fireScheduledWakes(deps: WorkerDeps): Promise<void> {
+  const now = new Date();
+  const due = await schedulesRepository.listDueSchedules(deps.db, now);
+  if (due.length === 0) {
+    return;
+  }
+  const enqueue = {
+    async enqueue(
+      type: string,
+      payload: Record<string, unknown>,
+      opts: { dueAt: Date; idempotencyKey: string },
+    ): Promise<void> {
+      await enqueueJob(deps.db, type as ParamJobType, payload, {
+        dueAt: opts.dueAt,
+        idempotencyKey: opts.idempotencyKey,
+      });
+    },
+  };
+  const { fired } = await fireDueSchedules(due, enqueue, now);
+  for (const id of fired) {
+    const schedule = due.find((s) => s.id === id);
+    if (schedule) {
+      await schedulesRepository.recordScheduleFired(
+        deps.db,
+        id,
+        schedule.spec,
+        now,
+      );
+    }
+  }
 }
