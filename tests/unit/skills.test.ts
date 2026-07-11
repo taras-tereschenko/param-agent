@@ -13,6 +13,7 @@ import {
   SkillsShClient,
   type SkillsShRunner,
 } from "../../src/skills/skills-sh";
+import { toSkillSummary } from "../../src/db/repositories/skills";
 
 function makeSkill(overrides: Partial<SkillSummary> = {}): SkillSummary {
   return {
@@ -24,6 +25,35 @@ function makeSkill(overrides: Partial<SkillSummary> = {}): SkillSummary {
     ...overrides,
   };
 }
+
+describe("toSkillSummary (DB row mapping)", () => {
+  test("maps enabled text -> boolean and uses metadata.summary", () => {
+    const summary = toSkillSummary({
+      slug: "deploy",
+      name: "Deploy Helper",
+      source: "local",
+      trustStatus: "trusted",
+      enabled: "true",
+      metadata: { summary: "how to ship a release" },
+    });
+    expect(summary.enabled).toBe(true);
+    expect(summary.trustStatus).toBe("trusted");
+    expect(summary.summary).toBe("how to ship a release");
+  });
+
+  test("falls back to name when metadata has no summary; enabled='false' -> false", () => {
+    const summary = toSkillSummary({
+      slug: "deploy",
+      name: "Deploy Helper",
+      source: "local",
+      trustStatus: "untrusted",
+      enabled: "false",
+      metadata: {},
+    });
+    expect(summary.enabled).toBe(false);
+    expect(summary.summary).toBe("Deploy Helper");
+  });
+});
 
 describe("SkillRegistry", () => {
   test("enable requires trusted status", () => {

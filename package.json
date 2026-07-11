@@ -21,6 +21,7 @@
     "create-local-config": "bun scripts/create-local-config.ts",
     "host-install": "bun scripts/install.ts",
     "discover-telegram": "bun scripts/telegram-id-discovery.ts",
+    "skills": "bun scripts/skills.ts",
     "evals": "bun evals/run.ts"
   },
   "dependencies": {
