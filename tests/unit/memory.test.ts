@@ -12,8 +12,12 @@ import {
   reviewMemoryCandidate,
 } from "../../src/memory/review";
 import { planCompaction } from "../../src/memory/compaction";
-import { cosineSimilarity } from "../../src/memory/embeddings";
+import {
+  cosineSimilarity,
+  resolveEmbeddingProvider,
+} from "../../src/memory/embeddings";
 import type { MemoryCandidatePayload } from "../../src/contracts/memory";
+import type { ParamConfig } from "../../src/config/schema";
 
 function record(
   over: Partial<StoredMemoryLike> & Pick<StoredMemoryLike, "id" | "scope" | "subjectRef" | "text">,
@@ -141,6 +145,33 @@ describe("memory ranking", () => {
     ]);
     expect(views[0]?.id).toBe("a");
   });
+
+  test("semantic similarity lifts a memory with no keyword overlap", () => {
+    // "b" shares no query keywords but has high cosine similarity (as a
+    // pgvector search would report); it should outrank the keyword-less "a".
+    const views = rankMemories("what does the user drink in the morning", [
+      {
+        id: "a",
+        scope: "user",
+        text: "owns a bicycle",
+        confidence: 0.5,
+        sensitivity: "low",
+        provenanceNote: "x",
+        createdAt: new Date(0).toISOString(),
+      },
+      {
+        id: "b",
+        scope: "user",
+        text: "prefers a flat white",
+        confidence: 0.5,
+        sensitivity: "low",
+        provenanceNote: "x",
+        createdAt: new Date(0).toISOString(),
+        similarity: 0.92,
+      },
+    ]);
+    expect(views[0]?.id).toBe("b");
+  });
 });
 
 describe("memory review", () => {
@@ -210,6 +241,30 @@ describe("embeddings", () => {
   });
   test("orthogonal vectors are 0", () => {
     expect(cosineSimilarity([1, 0], [0, 1])).toBe(0);
+  });
+
+  test("resolveEmbeddingProvider: null unless memory enabled AND key present", () => {
+    const memory = {
+      enabled: true,
+      embeddingModel: "text-embedding-3-small",
+      embeddingDimensions: 1536,
+    };
+    const cfg = (m: unknown) => ({ memory: m }) as unknown as ParamConfig;
+
+    // disabled -> null
+    expect(
+      resolveEmbeddingProvider(cfg({ ...memory, enabled: false }), {
+        OPENAI_API_KEY: "sk-x",
+      }),
+    ).toBeNull();
+    // enabled but no key -> null (graceful keyword fallback)
+    expect(resolveEmbeddingProvider(cfg(memory), {})).toBeNull();
+    // enabled + key -> a provider
+    const provider = resolveEmbeddingProvider(cfg(memory), {
+      OPENAI_API_KEY: "sk-x",
+    });
+    expect(provider?.name).toBe("openai");
+    expect(provider?.dimensions).toBe(1536);
   });
 });
 

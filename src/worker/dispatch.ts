@@ -18,6 +18,7 @@ import { TaskAgentRegistry } from "../task-agents/registry";
 import { buildTaskRunPlan } from "../task-agents/spawn";
 import { spawnTaskAgent } from "../task-agents/supervisor";
 import { reviewMemoryCandidate } from "../memory/review";
+import type { MaybeEmbeddingProvider } from "../memory/embeddings";
 import { storeCandidate, storeMemory } from "../memory/store";
 import { ingestInternalEvent } from "../orchestrator/router";
 import { auditRepository } from "../db/repositories";
@@ -40,6 +41,8 @@ export type DispatchDeps = {
   toolRegistry: ToolRegistry;
   toolHandlers: Map<string, ToolHandler>;
   taskAgentRegistry: TaskAgentRegistry;
+  /** Embeds memory text on write for semantic search (null = keyword only). */
+  embeddingProvider?: MaybeEmbeddingProvider;
   /** Deliver an inline-button approval prompt to the chat (injected by the
    *  worker; a trusted user taps Approve/Deny, resolved by approval id). */
   sendApprovalPrompt?: (params: {
@@ -402,15 +405,19 @@ async function dispatchMemoryCandidate(
   }
   const candidate = review.candidate;
   if (candidate.operation === "create" || candidate.operation === "update") {
-    await storeMemory(deps.db, {
-      scope: candidate.scope,
-      subjectRef: candidate.subjectRef ?? {},
-      text: candidate.text,
-      provenanceNote: candidate.provenanceNote,
-      confidence: candidate.confidence,
-      sensitivity: candidate.sensitivity,
-      sourceEventIds: candidate.sourceEventIds,
-      createdByRunId: ctx.runId,
-    });
+    await storeMemory(
+      deps.db,
+      {
+        scope: candidate.scope,
+        subjectRef: candidate.subjectRef ?? {},
+        text: candidate.text,
+        provenanceNote: candidate.provenanceNote,
+        confidence: candidate.confidence,
+        sensitivity: candidate.sensitivity,
+        sourceEventIds: candidate.sourceEventIds,
+        createdByRunId: ctx.runId,
+      },
+      deps.embeddingProvider,
+    );
   }
 }

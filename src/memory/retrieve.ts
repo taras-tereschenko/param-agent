@@ -3,6 +3,8 @@ import { and, desc, eq, or, sql, type SQL } from "drizzle-orm";
 import type { ParamDb } from "../db/client";
 import { memoryRecords } from "../db/schema";
 import type { MemoryScope, MemorySubjectRef, MemoryView } from "../contracts/memory";
+import { logger } from "../observability/logger";
+import type { MaybeEmbeddingProvider } from "./embeddings";
 import { rankMemories, type RankableMemory } from "./rank";
 import {
   buildRetrievalScopeFilters,
@@ -22,6 +24,8 @@ export type StoredMemoryLike = {
   provenanceNote: string;
   createdAt: string;
   updatedAt?: string;
+  /** Cosine similarity to the query (0..1) when a pgvector search ran. */
+  similarity?: number;
 };
 
 /**
@@ -60,6 +64,7 @@ export async function retrieveMemories(
   ctx: MemoryRetrievalContext,
   query: string,
   limit = 8,
+  provider?: MaybeEmbeddingProvider,
 ): Promise<MemoryView[]> {
   const filters = buildRetrievalScopeFilters(ctx);
   if (filters.length === 0) {
@@ -77,11 +82,51 @@ export async function retrieveMemories(
     ),
   ) as SQL[];
 
+  // Semantic search: when an embedding provider is configured, embed the query
+  // and let pgvector rank by cosine distance (nulls — rows without an embedding
+  // — sort last). Best-effort: an embed failure falls back to recency ordering
+  // + keyword ranking, never breaks retrieval.
+  let vecLiteral: string | undefined;
+  if (provider && query.trim().length > 0) {
+    try {
+      const [vec] = await provider.embed([query]);
+      if (vec && vec.length > 0) {
+        vecLiteral = `[${vec.join(",")}]`;
+      }
+    } catch (error) {
+      logger.child("memory").warn("query embed failed; keyword fallback", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const similarityExpr = vecLiteral
+    ? sql<
+        number | null
+      >`1 - (${memoryRecords.embedding} <=> ${vecLiteral}::vector)`
+    : sql<number | null>`null`;
+
   const rows = await db
-    .select()
+    .select({
+      id: memoryRecords.id,
+      scope: memoryRecords.scope,
+      subjectRef: memoryRecords.subjectRef,
+      status: memoryRecords.status,
+      text: memoryRecords.text,
+      confidence: memoryRecords.confidence,
+      sensitivity: memoryRecords.sensitivity,
+      provenanceNote: memoryRecords.provenanceNote,
+      createdAt: memoryRecords.createdAt,
+      updatedAt: memoryRecords.updatedAt,
+      similarity: similarityExpr,
+    })
     .from(memoryRecords)
     .where(and(eq(memoryRecords.status, "active"), or(...scopeConditions)))
-    .orderBy(desc(memoryRecords.updatedAt))
+    .orderBy(
+      vecLiteral
+        ? sql`${memoryRecords.embedding} <=> ${vecLiteral}::vector`
+        : desc(memoryRecords.updatedAt),
+    )
     .limit(MAX_SCOPED_FETCH);
 
   const records: StoredMemoryLike[] = rows.map((row) => ({
@@ -95,6 +140,7 @@ export async function retrieveMemories(
     provenanceNote: row.provenanceNote,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt?.toISOString(),
+    similarity: row.similarity == null ? undefined : Number(row.similarity),
   }));
 
   const ranked = selectMemories(records, ctx, query, limit);
@@ -113,6 +159,7 @@ function toView(record: StoredMemoryLike): RankableMemory {
     provenanceNote: record.provenanceNote,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+    similarity: record.similarity,
   };
 }
 

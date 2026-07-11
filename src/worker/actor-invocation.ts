@@ -12,6 +12,7 @@ import {
 } from "../db/repositories";
 import { retrieveMemories } from "../memory/retrieve";
 import { buildMemoryContextText } from "../memory/review";
+import type { MaybeEmbeddingProvider } from "../memory/embeddings";
 import { selectRelevantSkills, buildSkillContextText } from "../skills/loader";
 import { renderUi } from "../ui/renderer";
 import { ingestInternalEvent } from "../orchestrator/router";
@@ -66,6 +67,8 @@ export type ActorInvocationDeps = {
     ctx: DispatchContext,
     drafts: ActorOutputDraft[],
   ) => Promise<{ ranTool: boolean }>;
+  /** Embeds the retrieval query for pgvector semantic search (null = keyword). */
+  embeddingProvider?: MaybeEmbeddingProvider;
 };
 
 /** Max tool->result->actor re-wakes in one chain, so the agentic loop can't run away. */
@@ -181,6 +184,7 @@ export async function runActorInvocation(
         memoryRetrievalContextFromSession(session),
         ctx.latest?.text ?? "",
         6,
+        deps.embeddingProvider,
       );
       memoryContextText = buildMemoryContextText(memViews);
     } catch (error) {

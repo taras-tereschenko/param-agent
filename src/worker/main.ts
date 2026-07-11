@@ -17,6 +17,7 @@ import { scanForRecovery } from "../orchestrator/recovery";
 import { logger } from "../observability/logger";
 import { TaskAgentRegistry } from "../task-agents/registry";
 import { buildTaskExecutors } from "../task-agents/executor";
+import { resolveEmbeddingProvider } from "../memory/embeddings";
 import { resolveInference } from "./inference";
 import {
   handleInbound,
@@ -71,6 +72,11 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
   const taskAgentRegistry = new TaskAgentRegistry();
   // Runtime executors for spawned task agents (codex/opencode CLI, scrubbed env).
   const taskExecutors = buildTaskExecutors(config);
+  // Embedding provider for semantic memory (null when disabled / no OpenAI key).
+  const embeddingProvider = resolveEmbeddingProvider(config);
+  log.info("embedding provider resolved", {
+    provider: embeddingProvider?.name ?? "none (keyword-only)",
+  });
   const dispatchDeps: DispatchDeps = {
     db,
     config,
@@ -78,6 +84,7 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
     toolRegistry: toolset.registry,
     toolHandlers: toolset.handlers,
     taskAgentRegistry,
+    embeddingProvider,
   };
   const dispatch = (
     ...args: Parameters<NonNullable<WorkerDeps["dispatchOutputs"]>>
@@ -134,6 +141,7 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
       trustedUsers,
       toolset,
       taskExecutors,
+      embeddingProvider,
       dispatchOutputs: dispatch,
       answerCallback: (callbackId: string) => sender.answerCallback(callbackId),
       // Set below once the adapter exists (webhook intake reuses it).
@@ -180,6 +188,7 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
       trustedUsers,
       toolset,
       taskExecutors,
+      embeddingProvider,
       dispatchOutputs: dispatch,
     };
   }
