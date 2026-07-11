@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feat/param-implementation]
+  pull_request:
+
+jobs:
+  check:
+    name: typecheck + unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run test
+      - run: bash -n scripts/bootstrap.sh
+
+  integration:
+    name: db integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # pgvector image so `CREATE EXTENSION vector` works; POSTGRES_USER is a
+        # superuser, so the migration can create pgcrypto/vector.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: param
+          POSTGRES_PASSWORD: param
+          POSTGRES_DB: param
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U param"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://param:param@127.0.0.1:5432/param
+      PARAM_TEST_DATABASE_URL: postgresql://param:param@127.0.0.1:5432/param
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile
+      - run: bun run db:migrate
+      - run: bun run db:check
+      - run: bun run test:db
