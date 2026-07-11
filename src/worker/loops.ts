@@ -3,6 +3,7 @@ import {
   jobsRepository,
   runsRepository,
   schedulesRepository,
+  taskRunsRepository,
 } from "../db/repositories";
 import type { NormalizedInbound } from "../channels";
 import { ingestInboundEvent, ingestInternalEvent } from "../orchestrator/router";
@@ -31,6 +32,11 @@ import {
   type ActorInvocationDeps,
 } from "./actor-invocation";
 import { buildDefaultToolset } from "./dispatch";
+import type { TaskRunPlan } from "../task-agents/spawn";
+import type {
+  TaskExecutionOutcome,
+  TaskRuntimeRegistry,
+} from "../task-agents/executor";
 
 export type WorkerDeps = ActorInvocationDeps & {
   workerId: string;
@@ -39,6 +45,8 @@ export type WorkerDeps = ActorInvocationDeps & {
   toolset: ReturnType<typeof buildDefaultToolset>;
   /** Answer a Telegram callback query (stops the button spinner). */
   answerCallback?: (callbackId: string) => Promise<void>;
+  /** Runtime executors for spawned task agents (codex/opencode). */
+  taskExecutors?: TaskRuntimeRegistry;
 };
 
 // Explicit approval verbs only. Casual "ok"/"yes"/"no" must NOT resolve a
@@ -442,30 +450,75 @@ async function dispatchJob(
       return;
     }
     case "task_agent_run": {
-      // Task runtimes are not executable in this environment (no proven
-      // runtime). Report an honest failure result so the run does not hang.
       const taskRunId = job.payload.taskRunId as string | undefined;
       const parentSessionId = job.payload.parentSessionId as string | undefined;
-      if (parentSessionId && taskRunId) {
-        await ingestInternalEvent(deps.db, {
-          sessionId: parentSessionId,
-          eventType: "task.result",
-          dedupeKey: `task.result:${taskRunId}`,
-          source: { kind: "system", component: "task-agent" },
-          payload: {
-            taskSessionId: (job.payload.taskSessionId as string) ?? taskRunId,
-            taskRunId,
-            status: "failed",
-            summary: "task runtime is not available in this deployment",
-            error: {
-              code: "runtime_unavailable",
-              message: "no proven task runtime configured",
-            },
-          },
-        }).catch(() => undefined);
-        // Wake the parent so the actor can report the task outcome to the user.
-        await wakeActorForResult(deps, parentSessionId);
+      const taskSessionId = job.payload.taskSessionId as string | undefined;
+      const plan = job.payload.plan as TaskRunPlan | undefined;
+      if (!parentSessionId || !taskRunId) {
+        return;
       }
+
+      // Resolve the runtime executor for this task's runtime. If none is
+      // configured/available, report an HONEST unavailable outcome (never a
+      // fabricated success) so the parent can tell the user the truth.
+      const executor = plan
+        ? deps.taskExecutors?.resolve(plan.runtime)
+        : undefined;
+
+      let outcome: TaskExecutionOutcome;
+      if (!plan) {
+        outcome = {
+          status: "failed",
+          summary: "task plan missing from job payload",
+          error: { code: "invalid_job", message: "no plan on task_agent_run" },
+        };
+      } else if (!executor || !(await executor.isAvailable())) {
+        outcome = {
+          status: "failed",
+          summary: `no runtime available for task type "${plan.taskType}" (runtime: ${plan.runtime})`,
+          error: {
+            code: "runtime_unavailable",
+            message: "no proven task runtime configured",
+          },
+        };
+      } else {
+        await taskRunsRepository.markRunning(deps.db, taskRunId);
+        try {
+          outcome = await executor.run(plan);
+        } catch (error) {
+          outcome = {
+            status: "failed",
+            summary: "task execution threw",
+            error: {
+              code: "execution_error",
+              message: error instanceof Error ? error.message : String(error),
+            },
+          };
+        }
+      }
+
+      await taskRunsRepository
+        .markFinished(deps.db, taskRunId, outcome)
+        .catch(() => undefined);
+
+      await ingestInternalEvent(deps.db, {
+        sessionId: parentSessionId,
+        eventType: "task.result",
+        dedupeKey: `task.result:${taskRunId}`,
+        source: { kind: "system", component: "task-agent" },
+        payload: {
+          taskSessionId: taskSessionId ?? taskRunId,
+          taskRunId,
+          status: outcome.status,
+          summary: outcome.summary,
+          ...(outcome.followUpSuggestions
+            ? { followUpSuggestions: outcome.followUpSuggestions }
+            : {}),
+          ...(outcome.error ? { error: outcome.error } : {}),
+        },
+      }).catch(() => undefined);
+      // Wake the parent so the actor can report the task outcome to the user.
+      await wakeActorForResult(deps, parentSessionId);
       return;
     }
     default:

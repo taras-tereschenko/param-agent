@@ -14,6 +14,7 @@ import {
 import { scanForRecovery } from "../orchestrator/recovery";
 import { logger } from "../observability/logger";
 import { TaskAgentRegistry } from "../task-agents/registry";
+import { buildTaskExecutors } from "../task-agents/executor";
 import { resolveInference } from "./inference";
 import {
   handleInbound,
@@ -66,6 +67,8 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
   const trustedUsers = resolveTrustedUsers(config);
   const toolset = buildDefaultToolset();
   const taskAgentRegistry = new TaskAgentRegistry();
+  // Runtime executors for spawned task agents (codex/opencode CLI, scrubbed env).
+  const taskExecutors = buildTaskExecutors(config);
   const dispatchDeps: DispatchDeps = {
     db,
     config,
@@ -128,6 +131,7 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
       accountLabel,
       trustedUsers,
       toolset,
+      taskExecutors,
       dispatchOutputs: dispatch,
       answerCallback: (callbackId: string) => sender.answerCallback(callbackId),
     };
@@ -165,6 +169,7 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
       accountLabel,
       trustedUsers,
       toolset,
+      taskExecutors,
       dispatchOutputs: dispatch,
     };
   }

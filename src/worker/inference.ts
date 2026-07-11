@@ -10,11 +10,12 @@ export type ResolvedInference = {
   note: string;
 };
 
-// codex `exec` is an autonomous agent that runs on the host. Give its
-// subprocess ONLY the variables it needs — never the app's secrets
-// (DATABASE_URL / TELEGRAM_BOT_TOKEN / …) — so a prompt injection routed into
-// the transcript cannot exfiltrate them through the child environment.
-function codexBrainEnv(
+// codex `exec` (chat brain AND task agents) is an autonomous agent that runs on
+// the host. Give its subprocess ONLY the variables it needs — never the app's
+// secrets (DATABASE_URL / TELEGRAM_BOT_TOKEN / …) — so a prompt injection routed
+// into the transcript cannot exfiltrate them through the child environment.
+// Shared by the brain resolver here and the task-agent executor.
+export function scrubbedCliEnv(
   env: Record<string, string | undefined>,
 ): Record<string, string> {
   const allow = [
@@ -110,7 +111,7 @@ export async function resolveInference(
       const cli = new CodexCliActor({
         command: codexCfg?.command ?? "codex",
         args: codexCfg?.args ?? ["exec"],
-        env: codexBrainEnv(env),
+        env: scrubbedCliEnv(env),
       });
       if (await cli.isAvailable()) {
         return {

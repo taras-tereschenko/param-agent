@@ -26,3 +26,4 @@ export { identityRepository } from "./identity";
 export { auditRepository } from "./audit";
 export { approvalsRepository } from "./approvals";
 export { schedulesRepository } from "./schedules";
+export { taskRunsRepository } from "./task-runs";
