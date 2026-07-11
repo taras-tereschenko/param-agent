@@ -282,9 +282,13 @@ if command -v codex >/dev/null 2>&1 && [ -z "$HAS_OPENAI_KEY" ]; then
   if codex login status >/dev/null 2>&1; then
     log "codex already authenticated"
   elif { : </dev/tty; } 2>/dev/null; then
-    log "logging in to Codex — open the link it prints below (your ChatGPT/Codex subscription)"
-    if ! codex login </dev/tty >/dev/tty 2>&1; then
-      warn "codex login didn't complete; run 'codex login' in $TARGET_DIR, then: ${SUDO:+$SUDO }systemctl restart param-worker param-app"
+    # Device-code flow: the default `codex login` starts a localhost callback
+    # server, which does NOT work on a headless/remote box (your browser can't
+    # reach the VPS's localhost). --device-auth prints a URL + short code you
+    # approve from any browser — the right flow for a server install.
+    log "logging in to Codex (device code) — open the URL it prints and enter the code (your ChatGPT/Codex subscription)"
+    if ! codex login --device-auth </dev/tty >/dev/tty 2>&1; then
+      warn "codex login didn't complete; run 'codex login --device-auth' in $TARGET_DIR, then: ${SUDO:+$SUDO }systemctl restart param-worker param-app"
     fi
   else
     warn "no terminal for codex login; run 'codex login' in $TARGET_DIR, then start the services"
