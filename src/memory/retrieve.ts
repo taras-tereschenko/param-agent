@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, or, sql, type SQL } from "drizzle-orm";
 
 import type { ParamDb } from "../db/client";
 import { memoryRecords } from "../db/schema";
@@ -46,6 +46,14 @@ export function selectMemories(
   return rankMemories(query, candidates, limit);
 }
 
+/**
+ * Bound on how many scoped rows we pull into memory to rank. A single subject
+ * (user/group/session) rarely has this many memories; the cap is a safety valve
+ * so a pathological subject cannot pull an unbounded set into the process. We
+ * fetch the most-recent rows within the subject scope, then rank.
+ */
+const MAX_SCOPED_FETCH = 200;
+
 /** Retrieve scoped, ranked memory for a session and mark the used records. */
 export async function retrieveMemories(
   db: ParamDb,
@@ -57,16 +65,24 @@ export async function retrieveMemories(
   if (filters.length === 0) {
     return [];
   }
-  const scopes = [...new Set(filters.map((f) => f.scope))];
+  // Push the (scope, subject_ref) allow-list into SQL as a containment OR so we
+  // fetch ONLY this session's/user's/group's rows — not every subject's rows in
+  // the scope (which would load all users' private memory into the process).
+  // The subject_ref GIN index (jsonb_path_ops) serves the @> containment. The
+  // in-memory selectMemories() below is still the authoritative isolation gate.
+  const scopeConditions: SQL[] = filters.map((filter) =>
+    and(
+      eq(memoryRecords.scope, filter.scope),
+      sql`${memoryRecords.subjectRef} @> ${JSON.stringify(filter.subjectRef)}::jsonb`,
+    ),
+  ) as SQL[];
+
   const rows = await db
     .select()
     .from(memoryRecords)
-    .where(
-      and(
-        eq(memoryRecords.status, "active"),
-        inArray(memoryRecords.scope, scopes),
-      ),
-    );
+    .where(and(eq(memoryRecords.status, "active"), or(...scopeConditions)))
+    .orderBy(desc(memoryRecords.updatedAt))
+    .limit(MAX_SCOPED_FETCH);
 
   const records: StoredMemoryLike[] = rows.map((row) => ({
     id: row.id,
