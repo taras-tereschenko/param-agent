@@ -248,8 +248,23 @@ fi
 #    CLI, only OPENAI_API_KEY). Non-fatal; skip if already present.
 if ! command -v codex >/dev/null 2>&1; then
   log "installing Codex CLI (optional chat brain)"
-  curl -fsSL https://chatgpt.com/codex/install.sh | sh >/dev/null 2>&1 \
-    || warn "could not auto-install Codex; the OpenAI API brain (OPENAI_API_KEY) does not need it"
+  # CODEX_NON_INTERACTIVE=true: the upstream installer otherwise PROMPTS
+  # ("Start Codex now?") and can try to start an interactive session — wrong for
+  # an unattended bootstrap. Keep stderr visible so a real failure is diagnosable
+  # (we only hide stdout progress).
+  if curl -fsSL https://chatgpt.com/codex/install.sh \
+    | CODEX_NON_INTERACTIVE=true sh >/dev/null; then
+    # The installer drops the binary in ~/.local/bin, which may not be on PATH
+    # in this shell yet — add it so the brain check below can see codex.
+    export PATH="$HOME/.local/bin:$PATH"
+    if command -v codex >/dev/null 2>&1; then
+      log "codex installed ($(command -v codex)); run 'codex login' to use it as the brain"
+    else
+      warn "codex installer ran but 'codex' is not on PATH; add ~/.local/bin to PATH"
+    fi
+  else
+    warn "could not auto-install Codex; the OpenAI API brain (OPENAI_API_KEY) does not need it"
+  fi
 fi
 
 # 8b. Tailscale (installed by default) for private access to the box. The app
