@@ -200,21 +200,26 @@ async function collectAnswers(): Promise<SetupAnswers> {
   // The brain. An OpenAI API key is the turnkey path (headless, structured
   // output). Blank = you'll use `codex login`, or run without a real brain
   // (which production refuses — see PARAM_ACTOR).
-  const openaiApiKey = stopIfCancel(
-    await password({
-      message:
-        "OpenAI API key for the brain (blank = use Codex login instead)",
-      mask: "*",
-    }),
+  const openaiApiKey = (
+    stopIfCancel(
+      await password({
+        message:
+          "OpenAI API key for the brain (blank = use Codex login instead)",
+        mask: "*",
+      }),
+    ) ?? ""
   ).trim();
 
   // Tailscale is installed by default; an auth key joins the tailnet
   // automatically so you get private access to the box without exposing a port.
-  const tailscaleAuthKey = stopIfCancel(
-    await password({
-      message: "Tailscale auth key for private access (blank to set up later)",
-      mask: "*",
-    }),
+  const tailscaleAuthKey = (
+    stopIfCancel(
+      await password({
+        message:
+          "Tailscale auth key for private access (blank to set up later)",
+        mask: "*",
+      }),
+    ) ?? ""
   ).trim();
 
   const runtimes = toRuntimeChoices(
