@@ -11,6 +11,7 @@ import {
 } from "../db/repositories";
 import { retrieveMemories } from "../memory/retrieve";
 import { buildMemoryContextText } from "../memory/review";
+import { renderUi } from "../ui/renderer";
 import { ingestInternalEvent } from "../orchestrator/router";
 import { startActorRun } from "../orchestrator/run-queue";
 import { classifySteering } from "../orchestrator/steering";
@@ -34,6 +35,18 @@ export interface DeliveryPort {
     target: { chatId: string; messageThreadId?: string; replyToPlatformMessageId?: string },
   ): Promise<{ messageId: string }>;
   react(chatId: string, messageId: string, emoji: string): Promise<void>;
+  /**
+   * Deliver a rendered UI surface (text + optional inline buttons). Optional so
+   * existing test doubles stay valid; when absent, render_ui degrades to a plain
+   * text send.
+   */
+  sendUi?(
+    surface: {
+      text: string;
+      inlineButtons?: { text: string; callbackData: string }[];
+    },
+    target: { chatId: string; messageThreadId?: string },
+  ): Promise<{ messageId: string }>;
 }
 
 export type ActorInvocationDeps = {
@@ -244,12 +257,18 @@ export async function runActorInvocation(
       targetEventId: string;
       emoji: string;
     }[] = [];
+    const uiToDeliver: {
+      outputId: string;
+      payload: Extract<ActorOutputDraft, { type: "render_ui" }>["payload"];
+    }[] = [];
     let sequence = 0;
     for (const draft of turn.drafts) {
       const seq = sequence;
       sequence += 1;
       const isVisible =
-        draft.type === "message" || draft.type === "react_to_message";
+        draft.type === "message" ||
+        draft.type === "react_to_message" ||
+        draft.type === "render_ui";
       const { output, inserted } = await runsRepository.insertActorOutput(db, {
         id: newId(),
         type: draft.type,
@@ -280,6 +299,8 @@ export async function runActorInvocation(
           targetEventId: draft.payload.targetEventId,
           emoji: draft.payload.emoji,
         });
+      } else if (draft.type === "render_ui") {
+        uiToDeliver.push({ outputId: output.id, payload: draft.payload });
       }
     }
 
@@ -289,6 +310,7 @@ export async function runActorInvocation(
     if (turn.preSendRefreshRequired) {
       messagesToDeliver.length = 0;
       reactionsToDeliver.length = 0;
+      uiToDeliver.length = 0;
     }
 
     // Deliver visible messages, tracking delivery status per output.
@@ -360,6 +382,50 @@ export async function runActorInvocation(
             error: error instanceof Error ? error.message : String(error),
           });
         }
+      }
+    }
+
+    // Deliver rendered UI surfaces (render_ui): validate + render to a channel
+    // surface, then send the text plus any inline buttons. Mini-app surfaces
+    // carry no inline text delivery (the Mini App fetches the payload), so they
+    // are marked delivered without a chat send.
+    for (const ui of uiToDeliver) {
+      try {
+        const surface = renderUi(ui.payload);
+        if (surface.target === "mini_app" || !surface.telegram) {
+          await runsRepository.setOutputDelivery(db, ui.outputId, "succeeded");
+          continue;
+        }
+        const tg = surface.telegram;
+        const sent = deps.delivery.sendUi
+          ? await deps.delivery.sendUi(
+              { text: tg.text, inlineButtons: tg.inlineButtons },
+              target,
+            )
+          : await deps.delivery.sendText(tg.text, target);
+        delivered += 1;
+        await runsRepository.setOutputDelivery(db, ui.outputId, "succeeded");
+        await ingestInternalEvent(db, {
+          sessionId: run.sessionId,
+          eventType: "delivery.succeeded",
+          dedupeKey: idempotencyKeys.delivery(ui.outputId, "telegram"),
+          source: { kind: "param" },
+          actorRunId: run.id,
+          payload: {
+            outputId: ui.outputId,
+            platformMessageId: sent.messageId,
+            deliveredAt: nowIso(),
+            adapter: "telegram",
+            surfaceId: surface.surfaceId,
+          },
+        });
+      } catch (error) {
+        await runsRepository.setOutputDelivery(db, ui.outputId, "failed");
+        logger.warn("ui delivery failed", {
+          runId: run.id,
+          outputId: ui.outputId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 

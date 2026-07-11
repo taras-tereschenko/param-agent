@@ -5,7 +5,7 @@
  * formatting is produced elsewhere (render_ui) and is not this seam's concern.
  */
 
-import type { TelegramTransport } from "./transport";
+import type { SendMessageParams, TelegramTransport } from "./transport";
 
 export type SendTarget = {
   chatId: string;
@@ -71,6 +71,38 @@ export class TelegramSender {
       message_id: Number(messageId),
       emoji,
     });
+  }
+
+  /**
+   * Deliver a rendered UI surface: the surface text plus, when present, one row
+   * of inline buttons (callback_data already validated + byte-capped by the
+   * renderer). Falls back to a plain message when there are no buttons.
+   */
+  async sendUi(
+    surface: {
+      text: string;
+      inlineButtons?: { text: string; callbackData: string }[];
+    },
+    target: SendTarget,
+  ): Promise<{ messageId: string }> {
+    const params: SendMessageParams = {
+      chat_id: target.chatId,
+      text: truncateForTelegram(surface.text),
+    };
+    if (target.messageThreadId !== undefined) {
+      params.message_thread_id = target.messageThreadId;
+    }
+    if (surface.inlineButtons && surface.inlineButtons.length > 0) {
+      params.reply_markup = {
+        inline_keyboard: [
+          surface.inlineButtons.map((button) => ({
+            text: button.text,
+            callback_data: button.callbackData,
+          })),
+        ],
+      };
+    }
+    return this.transport.sendMessage(params);
   }
 
   async answerCallback(callbackId: string, text?: string): Promise<void> {

@@ -380,6 +380,54 @@ describe("TelegramChannelAdapter.pollOnce", () => {
     expect(transport.sent).toHaveLength(1);
     expect(transport.sent[0]?.text).toBe("hello");
   });
+
+  test("sender delivers a UI surface with inline buttons", async () => {
+    const transport = new FakeTransport([]);
+    const adapter = new TelegramChannelAdapter({
+      accountId: ACCOUNT_ID,
+      transport,
+      accessLists: makeLists(),
+      unauthorizedBehavior: "ignore",
+      async onInbound() {},
+    });
+
+    await adapter.sender.sendUi(
+      {
+        text: "Pick one",
+        inlineButtons: [
+          { text: "Yes", callbackData: "cb:s1:yes" },
+          { text: "No", callbackData: "cb:s1:no" },
+        ],
+      },
+      { chatId: "111", messageThreadId: "7" },
+    );
+
+    expect(transport.sent).toHaveLength(1);
+    const params = transport.sent[0]!;
+    expect(params.text).toBe("Pick one");
+    expect(params.message_thread_id).toBe("7");
+    const row = params.reply_markup?.inline_keyboard[0];
+    expect(row).toEqual([
+      { text: "Yes", callback_data: "cb:s1:yes" },
+      { text: "No", callback_data: "cb:s1:no" },
+    ]);
+  });
+
+  test("sender sends a buttonless UI surface as a plain message", async () => {
+    const transport = new FakeTransport([]);
+    const adapter = new TelegramChannelAdapter({
+      accountId: ACCOUNT_ID,
+      transport,
+      accessLists: makeLists(),
+      unauthorizedBehavior: "ignore",
+      async onInbound() {},
+    });
+
+    await adapter.sender.sendUi({ text: "status: ok" }, { chatId: "111" });
+    expect(transport.sent).toHaveLength(1);
+    expect(transport.sent[0]?.text).toBe("status: ok");
+    expect(transport.sent[0]?.reply_markup).toBeUndefined();
+  });
 });
 
 /* -------------------------------------------------------------------------- */
