@@ -26,6 +26,10 @@ import {
   type WorkerDeps,
 } from "./loops";
 import { buildDefaultToolset, type DispatchDeps, dispatchOutputs } from "./dispatch";
+import {
+  buildMcpEntriesFromConfig,
+  registerMcpServers,
+} from "../tools/mcp/register";
 import { buildApprovalKeyboard } from "../action-review/approval-buttons";
 import { resolveTrustedUsers } from "./trusted";
 
@@ -69,6 +73,20 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
 
   const trustedUsers = resolveTrustedUsers(config);
   const toolset = buildDefaultToolset();
+  // Register configured MCP servers' tools (stdio only; non-trusted servers are
+  // review-gated). No-op when no MCP servers are configured.
+  const mcpEntries = buildMcpEntriesFromConfig(config.tools?.mcp, (value) =>
+    resolveMaybe(value as StringOrRef),
+  );
+  if (mcpEntries.length > 0) {
+    await registerMcpServers(toolset.registry, toolset.handlers, mcpEntries).catch(
+      (error) =>
+        log.warn("MCP registration failed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+    );
+    log.info("MCP servers registered", { count: mcpEntries.length });
+  }
   const taskAgentRegistry = new TaskAgentRegistry();
   // Runtime executors for spawned task agents (codex/opencode CLI, scrubbed env).
   const taskExecutors = buildTaskExecutors(config);

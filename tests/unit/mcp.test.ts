@@ -6,6 +6,7 @@ import {
   type McpSourceLike,
   registerMcpTools,
 } from "../../src/tools/mcp/client";
+import { registerMcpServers } from "../../src/tools/mcp/register";
 import { ToolRegistry } from "../../src/tools/registry";
 
 function fakeSource(): McpSourceLike & {
@@ -64,5 +65,31 @@ describe("MCP tool registration + execution", () => {
     });
     expect(registry.get("web.get_page")?.riskLevel).toBe("server");
     expect(registry.get("web.get_page")?.approvalMode).toBe("review");
+  });
+});
+
+describe("registerMcpServers trust gating", () => {
+  test("a non-trusted server's read tool is forced to review (no auto-run)", async () => {
+    const registry = new ToolRegistry();
+    const handlers = new Map<string, ToolHandler>();
+    await registerMcpServers(registry, handlers, [
+      { source: fakeSource(), trusted: false },
+    ]);
+    // get_page would be safe_read/auto_if_safe by the name heuristic, but an
+    // unreviewed server must never auto-run: forced to write/review.
+    expect(registry.get("web.get_page")?.riskLevel).toBe("write");
+    expect(registry.get("web.get_page")?.approvalMode).toBe("review");
+    // still executable (via approval) — the handler is registered
+    expect(handlers.has("web.get_page")).toBe(true);
+  });
+
+  test("a trusted server keeps the read-name heuristic", async () => {
+    const registry = new ToolRegistry();
+    const handlers = new Map<string, ToolHandler>();
+    await registerMcpServers(registry, handlers, [
+      { source: fakeSource(), trusted: true },
+    ]);
+    expect(registry.get("web.get_page")?.riskLevel).toBe("safe_read");
+    expect(registry.get("web.delete_all")?.riskLevel).toBe("write");
   });
 });
