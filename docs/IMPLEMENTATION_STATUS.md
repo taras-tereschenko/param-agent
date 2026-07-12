@@ -107,6 +107,29 @@ CLI, an MCP server, an embedding provider), that is stated explicitly.
 - Minor: `startActorRun` is not yet transactional/session-locked; first-reply
   latency can approach the long-poll window.
 
+## Known minor issues (deferred from the fleet review; LOW)
+
+Verified real, low-impact, and consciously deferred — none blocks a live bot:
+
+- **Denied action isn't acknowledged.** A denied tool call / Deny-button tap
+  doesn't re-wake the actor, so Param can silently drop the interaction instead
+  of saying "ok, skipping that." UX gap, not a safety gap.
+- **Task re-executes on job retry.** `task_agent_run` has no already-finished
+  guard, so a retry after a post-execution throw re-runs the CLI task (the
+  `task.result` event is deduped, so the parent isn't double-notified).
+- **Truncation can split a surrogate pair** on a >4096-char message (rare;
+  Telegram may show a replacement char).
+- **Non-constant-time** operator-token / webhook-secret comparison (theoretical
+  timing side-channel; loopback/secret posture makes it very low risk).
+- **Root-run installer → root-owned services** with no warning (documented
+  non-root path exists in docs/DEPLOY_VPS.md).
+- **SSRF guard (`url-safety.ts`) is unused** — there's no active outbound-fetch
+  path to guard yet; it also does no DNS resolution (rebinding not caught).
+- **pgvector `ivfflat.probes` unset** (default 1) → lower semantic recall until
+  tuned.
+- **`OPENAI_API_KEY` is passed to codex/opencode task children** (needed for the
+  model; a compromised runtime could read it — inherent tradeoff).
+
 ## Requires live-VPS proof (cannot be verified from a dev machine)
 
 - The OpenAI brain producing good replies end to end on Telegram (`brain:check`
