@@ -48,10 +48,23 @@ describe("CodexCliActor", () => {
     expect(res.drafts[0]?.type).toBe("no_reply");
   });
 
-  test("unparseable output degrades to a safe no_reply, never crashes", async () => {
+  test("plain-prose output is delivered as a message (codex replies in prose)", async () => {
+    // codex is a chat model and may reply in natural language rather than the
+    // JSON format. That IS the reply — deliver it, don't silently drop it (the
+    // old "degrade to no_reply" was the mute-bot bug).
     const actor = new CodexCliActor({
-      runner: runnerReturning("sure! here is what I think: (not json)"),
+      runner: runnerReturning("sure! here is what I think: it works."),
     });
+    const res = await actor.run(request());
+    const msg = res.drafts.find((d) => d.type === "message");
+    expect(msg?.type).toBe("message");
+    expect(msg && msg.type === "message" ? msg.payload.text : "").toContain(
+      "it works",
+    );
+  });
+
+  test("empty / whitespace output stays quiet (no fabricated message)", async () => {
+    const actor = new CodexCliActor({ runner: runnerReturning("   \n  ") });
     const res = await actor.run(request());
     expect(res.drafts.map((d) => d.type)).toEqual(["no_reply", "done"]);
   });

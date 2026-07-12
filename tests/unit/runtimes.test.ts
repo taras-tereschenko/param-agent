@@ -144,6 +144,50 @@ describe("CodexCliActor output handling", () => {
       "hey, around!",
     );
   });
+
+  const runActor = async (stdout: string) => {
+    const runner: CliRunner = async () => ({ stdout, stderr: "", exitCode: 0 });
+    return new CodexCliActor({ runner }).run({
+      renderedPrompt: "hi",
+      promptPacket: {} as PromptPacket,
+      runType: "normal_chat",
+      allowedOutputs: ["message", "no_reply", "done"],
+    } as unknown as ActorInferenceRequest);
+  };
+
+  test("wraps a PLAIN-PROSE codex reply (no JSON) as a message", async () => {
+    const res = await runActor("hey, yeah I'm around — what's up?");
+    const msg = res.drafts.find((d) => d.type === "message");
+    expect(msg && msg.type === "message" ? msg.payload.text : "").toContain(
+      "around",
+    );
+  });
+
+  test("done-only output stays quiet (no fabricated message)", async () => {
+    // The exact failure seen on the VPS: valid JSON, but only `done`.
+    const res = await runActor(
+      '[{"type":"done","payload":{"status":"completed"}}]',
+    );
+    expect(res.drafts.some((d) => d.type === "message")).toBe(false);
+  });
+
+  test("done + surrounding prose -> the prose becomes the reply", async () => {
+    const res = await runActor(
+      'sure, happy to help!\n[{"type":"done","payload":{"status":"completed"}}]',
+    );
+    const msg = res.drafts.find((d) => d.type === "message");
+    expect(msg && msg.type === "message" ? msg.payload.text : "").toContain(
+      "happy to help",
+    );
+  });
+
+  test("explicit no_reply is respected (stays quiet, no wrap)", async () => {
+    const res = await runActor(
+      '[{"type":"no_reply","payload":{"reason":"nothing_to_add"}},{"type":"done","payload":{"status":"completed"}}]',
+    );
+    expect(res.drafts.some((d) => d.type === "message")).toBe(false);
+    expect(res.drafts.some((d) => d.type === "no_reply")).toBe(true);
+  });
 });
 
 describe("buildRuntimeFrame", () => {

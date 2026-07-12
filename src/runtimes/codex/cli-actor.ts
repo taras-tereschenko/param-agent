@@ -198,7 +198,32 @@ export class CodexCliActor implements ActorInference {
       return { drafts: SAFE_FALLBACK, provider: "codex-cli" };
     }
 
-    const { drafts, errors } = parseActorOutputs(extractOutputArray(res.stdout));
+    const arrayText = extractOutputArray(res.stdout);
+    const { drafts, errors } = parseActorOutputs(arrayText);
+    const hasMessage = drafts.some((d) => d.type === "message");
+
+    // codex is a chat model and may reply in PLAIN PROSE instead of the JSON
+    // format. Never drop that: if no structured message was parsed, wrap any
+    // prose codex produced as the reply so the bot actually talks. (When codex
+    // returned ONLY `[{done}]` there is no prose, so this correctly stays quiet
+    // and the strengthened OUTPUT_INSTRUCTION is what makes it emit a message.)
+    if (!hasMessage) {
+      const prose = plainReplyText(
+        drafts.length === 0 ? res.stdout : res.stdout.replace(arrayText, " "),
+      );
+      if (prose) {
+        // Build through the parser so the message payload gets its schema
+        // defaults (parseMode/style/visible) and is a valid draft.
+        const { drafts: wrapped } = parseActorOutputs([
+          { type: "message", payload: { text: prose } },
+          { type: "done", payload: { status: "completed" } },
+        ]);
+        if (wrapped.length > 0) {
+          return { drafts: wrapped, provider: "codex-cli" };
+        }
+      }
+    }
+
     if (drafts.length === 0) {
       log.warn("codex cli produced no valid outputs; staying quiet", {
         errors: errors.slice(0, 3),
@@ -208,9 +233,9 @@ export class CodexCliActor implements ActorInference {
       });
       return { drafts: SAFE_FALLBACK, provider: "codex-cli" };
     }
-    // Parsed, but the model closed the turn with only `done`/nothing to say —
-    // log the raw output so a mis-following model is diagnosable in one run
-    // (the actor will simply stay quiet, which for a normal turn is a bug).
+    // Parsed, but the model closed the turn with only `done`/nothing to say and
+    // wrote no prose — log the raw output so a mis-following model is
+    // diagnosable in one run (the actor will simply stay quiet).
     const hasReplyOrAction = drafts.some(
       (d) =>
         d.type === "message" ||
@@ -227,4 +252,26 @@ export class CodexCliActor implements ActorInference {
     }
     return { drafts, provider: "codex-cli" };
   }
+}
+
+/**
+ * Extract a plausible plain-text reply from codex output when no structured
+ * message was parsed: strip code fences + any bracketed JSON, collapse
+ * whitespace, and require real words at a sane length. Returns "" when nothing
+ * usable remains (so a done-only turn stays quiet rather than sending noise).
+ */
+export function plainReplyText(text: string): string {
+  const cleaned = text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/\[[\s\S]*\]/g, " ")
+    .replace(/\{[\s\S]*\}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleaned.length < 2 || cleaned.length > 4000) {
+    return "";
+  }
+  if (!/[a-zA-Z]/.test(cleaned)) {
+    return "";
+  }
+  return cleaned;
 }
