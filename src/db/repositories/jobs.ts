@@ -110,7 +110,12 @@ export async function claimNextJobWithRecovery(
         or(
           and(
             eq(jobs.status, "queued"),
-            lte(jobs.dueAt, now),
+            // Compare dueAt against the DATABASE clock (now()), not the app's
+            // JS Date: dueAt is set by the DB (defaultNow), so any skew between
+            // the app host and the DB host would make a just-enqueued, due-now
+            // job look "not yet due" and skip it for a cycle (or forever in a
+            // skewed test env). Same-clock comparison is skew-proof.
+            sql`${jobs.dueAt} <= now()`,
             lt(jobs.attemptCount, jobs.maxAttempts),
           ),
           and(

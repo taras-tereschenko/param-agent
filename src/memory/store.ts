@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 
 import type { ParamDb } from "../db/client";
 import { memoryCandidates, memoryRecords } from "../db/schema";
@@ -114,8 +114,12 @@ export async function markMemoryUsed(
   if (ids.length === 0) {
     return;
   }
+  // Use drizzle inArray, NOT `= any($1::uuid[])`: bun-sql binds a JS string
+  // array in a way that Postgres reads as a malformed array literal ("...":
+  // no braces), which threw on every retrieval and silently broke memory.
+  // inArray expands to `id in ($1, $2, ...)` with each id bound + cast correctly.
   await db
     .update(memoryRecords)
     .set({ lastUsedAt: now })
-    .where(sql`${memoryRecords.id} = any(${ids}::uuid[])`);
+    .where(inArray(memoryRecords.id, ids));
 }
