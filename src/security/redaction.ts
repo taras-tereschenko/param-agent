@@ -1,6 +1,8 @@
 const SECRET_KEY = /token|secret|key|password|passwd|authorization|cookie|bearer/i;
 const BEARER = /\bbearer\s+[A-Za-z0-9._-]+/gi;
-const OPENAI_KEY = /\bsk-[A-Za-z0-9]{8,}\b/g;
+// Includes `-`/`_` so modern keys (sk-proj-…, sk-svcacct-…) are masked, not
+// just the legacy sk-<alnum> form.
+const OPENAI_KEY = /\bsk-[A-Za-z0-9_-]{8,}\b/g;
 // Telegram bot token: <digits>:<~35 char secret>. The ':' breaks a \b boundary
 // so this needs its own pattern (LONG_TOKEN alone misses it).
 const TELEGRAM_BOT_TOKEN = /\b\d{6,}:[A-Za-z0-9_-]{20,}\b/g;

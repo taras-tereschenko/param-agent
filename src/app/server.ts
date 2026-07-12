@@ -54,13 +54,18 @@ export function createApp() {
   // checks + ingests it through the SAME pipeline as polling (see the
   // telegram_webhook_update job handler).
   app.post("/webhooks/telegram/:account", async (c) => {
-    // Validate Telegram's secret token before doing anything, so forged updates
-    // are rejected.
-    const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
-    if (
-      secret &&
-      c.req.header("x-telegram-bot-api-secret-token") !== secret
-    ) {
+    // SECURITY: fail CLOSED. Without a configured secret, an attacker could POST
+    // a forged update with `from.id = <owner>` and the worker would ingest it as
+    // a genuine owner message (full impersonation / remote drive). Webhook mode
+    // therefore REQUIRES TELEGRAM_WEBHOOK_SECRET, and the header must match it.
+    const secret = process.env.TELEGRAM_WEBHOOK_SECRET?.trim();
+    if (!secret) {
+      return c.json(
+        { ok: false, error: "webhook secret not configured" },
+        503,
+      );
+    }
+    if (c.req.header("x-telegram-bot-api-secret-token") !== secret) {
       return c.json({ ok: false, error: "unauthorized" }, 401);
     }
     const account = c.req.param("account");

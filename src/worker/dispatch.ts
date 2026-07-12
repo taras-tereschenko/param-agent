@@ -339,7 +339,16 @@ async function dispatchApprovalRequest(
   await createApprovalRequest(deps.db, {
     sessionId: ctx.sessionId,
     actorRunId: ctx.runId,
-    request: { ...payload, requiredTrustScope: scope },
+    // SECURITY: bind the requester to THIS run's trigger user, never the
+    // actor-supplied payload.requestedBy. Otherwise a prompt-injected actor
+    // could omit/spoof requestedBy so the self-approval (requester != approver)
+    // guard can't fire, letting the same user approve their own request.
+    request: {
+      ...payload,
+      requiredTrustScope: scope,
+      requestedBy: ctx.requester,
+      requesterEventIds: ctx.requesterEventIds,
+    },
     requiredTrustScope: scope,
     expiresAt: approvalExpiry(deps),
   });
@@ -409,7 +418,11 @@ async function dispatchMemoryCandidate(
       deps.db,
       {
         scope: candidate.scope,
-        subjectRef: candidate.subjectRef ?? {},
+        // SECURITY: bind the subject to THIS session's context — never trust the
+        // actor-supplied subjectRef. Otherwise a prompt-injected actor could
+        // write a "fact" into another group's / user's memory (cross-scope
+        // poisoning), since retrieval scopes by those ids.
+        subjectRef: boundMemorySubjectRef(candidate.scope, ctx, candidate.subjectRef),
         text: candidate.text,
         provenanceNote: candidate.provenanceNote,
         confidence: candidate.confidence,
@@ -419,5 +432,36 @@ async function dispatchMemoryCandidate(
       },
       deps.embeddingProvider,
     );
+  }
+}
+
+/**
+ * Derive the memory subject from the current session context, not actor input.
+ * group/topic -> the current chat; session -> this session; user -> the DM
+ * user (in a Telegram DM the chat id IS the user id; reviewMemoryCandidate has
+ * already downgraded user->group for group sessions, so "user" only reaches
+ * here in a DM). project/agent keep the actor-supplied id (deliberate
+ * cross-scope links, not an isolation boundary) but fall back to session.
+ */
+function boundMemorySubjectRef(
+  scope: string,
+  ctx: DispatchContext,
+  supplied?: { projectId?: string; agentType?: string },
+): Record<string, string> {
+  switch (scope) {
+    case "group":
+      return { groupChatId: ctx.platformChatId };
+    case "user":
+      return { paramUserId: ctx.platformChatId };
+    case "project":
+      return supplied?.projectId
+        ? { projectId: supplied.projectId }
+        : { sessionId: ctx.sessionId };
+    case "agent":
+      return supplied?.agentType
+        ? { agentType: supplied.agentType }
+        : { sessionId: ctx.sessionId };
+    default:
+      return { sessionId: ctx.sessionId };
   }
 }

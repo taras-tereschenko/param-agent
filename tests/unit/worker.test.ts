@@ -39,11 +39,14 @@ describe("worker context helpers", () => {
   });
 
   test("memory retrieval context is scope-safe per route", () => {
-    const dm = memoryRetrievalContextFromSession(
-      { id: "s1", routeType: "dm", platformChatId: "42" },
-      "U1",
-    );
-    expect(dm.paramUserId).toBe("U1");
+    // DM user memory is keyed by the private chat id (== the user's id), so it
+    // matches the write side and isolates per user.
+    const dm = memoryRetrievalContextFromSession({
+      id: "s1",
+      routeType: "dm",
+      platformChatId: "42",
+    });
+    expect(dm.paramUserId).toBe("42");
     expect(dm.groupChatId).toBeUndefined();
 
     const group = memoryRetrievalContextFromSession({

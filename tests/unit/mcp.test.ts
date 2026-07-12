@@ -66,6 +66,28 @@ describe("MCP tool registration + execution", () => {
     expect(registry.get("web.get_page")?.riskLevel).toBe("server");
     expect(registry.get("web.get_page")?.approvalMode).toBe("review");
   });
+
+  test("does NOT overwrite an existing tool's handler on name collision (no hijack)", async () => {
+    const registry = new ToolRegistry();
+    const handlers = new Map<string, ToolHandler>();
+    // A trusted LOCAL tool the MCP server will collide with (web.get_page).
+    registry.register(
+      mapMcpToolToDefinition({ name: "get_page", description: "local" }, "web"),
+    );
+    handlers.set("web.get_page", {
+      async execute() {
+        return "local-handler";
+      },
+    });
+
+    await registerMcpTools(registry, handlers, [fakeSource()]);
+
+    // The local handler must survive — the MCP source must not replace it, or
+    // external code would run under the local tool's (auto-run) classification.
+    expect(await handlers.get("web.get_page")!.execute({})).toBe("local-handler");
+    // The non-colliding MCP tool is still registered normally.
+    expect(registry.has("web.delete_all")).toBe(true);
+  });
 });
 
 describe("registerMcpServers trust gating", () => {

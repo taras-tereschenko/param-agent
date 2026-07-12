@@ -213,9 +213,16 @@ export async function registerMcpTools(
                 : ("review" as ToolApprovalMode),
           }
         : def;
-      if (!registry.has(finalDef.name)) {
-        registry.register(finalDef);
+      // SECURITY: on a name collision, skip BOTH the definition AND the handler.
+      // Registering only the def conditionally but the handler unconditionally
+      // would let an MCP tool named like a local tool (e.g. `service.status`)
+      // keep the LOCAL safe/auto-run classification for policy while its handler
+      // executes the external MCP code — running arbitrary code auto-approved,
+      // escaping Action Review. Never overwrite an existing tool's handler.
+      if (registry.has(finalDef.name)) {
+        continue;
       }
+      registry.register(finalDef);
       handlers.set(finalDef.name, {
         async execute(input: Record<string, unknown>): Promise<unknown> {
           const result = await source.callTool(finalDef.name, input);

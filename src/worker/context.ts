@@ -46,18 +46,21 @@ export function approvalPolicyFromConfig(
 
 /**
  * Derive a scope-safe memory retrieval context from a session. Group/topic
- * sessions retrieve group memory; DM sessions retrieve session (+ user when the
- * partner's Param user id is known). Scope isolation is enforced downstream.
+ * sessions retrieve group memory; DM sessions retrieve session + user memory.
+ *
+ * In a Telegram private chat the chat id IS the user's id, so we key DM
+ * user-scoped memory by `platformChatId`. The memory WRITE path binds the same
+ * way (see dispatch.boundMemorySubjectRef), so store and retrieve are
+ * consistent. Scope isolation is still enforced downstream in selectMemories.
  */
 export function memoryRetrievalContextFromSession(
   session: Pick<Session, "id" | "routeType" | "platformChatId">,
-  paramUserId?: string,
 ): MemoryRetrievalContext {
   const routeType = session.routeType as MemoryRetrievalContext["routeType"];
   return {
     routeType,
     sessionId: session.id,
-    paramUserId: routeType === "dm" ? paramUserId : undefined,
+    paramUserId: routeType === "dm" ? session.platformChatId : undefined,
     groupChatId:
       routeType === "group" || routeType === "topic"
         ? session.platformChatId
