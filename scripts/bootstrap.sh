@@ -327,10 +327,17 @@ if [ "$OS" = "Linux" ]; then
       # the install still finishes; Tailscale is optional. When you say yes we
       # run `tailscale up` with its I/O on the terminal so the login URL is
       # visible; it blocks until you approve in the browser.
+      # Drain input buffered by the previous interactive step (codex login can
+      # leave a stray newline on the tty); otherwise the read below grabs that
+      # stale line and looks like "skip" even though you typed y. Then read the
+      # real answer and normalize it (strip CR/whitespace) so "y", "y\r", " y "
+      # all match.
+      while read -r -t 0.1 _ </dev/tty 2>/dev/null; do :; done
       printf '\nConnect this box to your Tailscale network now?\n  It prints a login link to open in your browser (just like `codex login`).\n  Optional — press Enter/N to skip and do it later. [y/N] ' >/dev/tty
       read -r TS_ANSWER </dev/tty || TS_ANSWER=""
+      TS_ANSWER="$(printf '%s' "$TS_ANSWER" | tr -d '[:space:]')"
       case "$TS_ANSWER" in
-        [yY]*)
+        [yY] | [yY][eE][sS])
           log "starting Tailscale login — open the link it prints below"
           if ! $SUDO tailscale up --hostname=param-agent </dev/tty >/dev/tty 2>&1; then
             warn "tailscale login didn't complete; run 'sudo tailscale up' anytime to retry"
