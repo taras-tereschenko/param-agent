@@ -192,7 +192,10 @@ export class OpenAiApiActor implements ActorInference {
 
   constructor(opts: OpenAiApiActorOptions = {}) {
     this.apiKey = opts.apiKey ?? Bun.env.OPENAI_API_KEY;
-    this.modelId = opts.model ?? Bun.env.PARAM_OPENAI_MODEL ?? "gpt-4o-mini";
+    // || not ??: an empty string (`PARAM_OPENAI_MODEL=` in .env) must fall
+    // through to the default, not become the model id.
+    this.modelId =
+      opts.model?.trim() || Bun.env.PARAM_OPENAI_MODEL?.trim() || "gpt-4o-mini";
     this.languageModel = opts.languageModel;
     this.timeoutMs = opts.timeoutMs ?? 60_000;
   }

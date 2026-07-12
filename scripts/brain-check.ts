@@ -12,7 +12,9 @@ import type { ActorInferenceRequest } from "../src/actor/inference";
 import { CodexCliActor } from "../src/runtimes/codex/cli-actor";
 import { OpenAiApiActor } from "../src/runtimes/openai/api-actor";
 
-const mode = (Bun.env.PARAM_ACTOR ?? "auto").toLowerCase();
+// || not ??: .env writes `PARAM_ACTOR=` (empty), which `??` would NOT default,
+// leaving mode="" that matches no branch (the openai/codex selection below).
+const mode = (Bun.env.PARAM_ACTOR?.trim() || "auto").toLowerCase();
 
 function pickActor() {
   const openai = new OpenAiApiActor();

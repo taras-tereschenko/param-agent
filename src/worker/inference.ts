@@ -62,7 +62,10 @@ export async function resolveInference(
   config: ParamConfig,
   env: Record<string, string | undefined> = Bun.env,
 ): Promise<ResolvedInference> {
-  const mode = (env.PARAM_ACTOR ?? "auto").toLowerCase();
+  // `|| "auto"` not `?? "auto"`: .env writes `PARAM_ACTOR=` (empty string), and
+  // `??` only defaults on undefined — an empty string would match no branch and
+  // leave Param with no brain. Trim + || treats blank/whitespace as auto.
+  const mode = (env.PARAM_ACTOR?.trim() || "auto").toLowerCase();
   const isProduction = config.app.environment === "production";
 
   if (mode === "mock") {
@@ -81,7 +84,7 @@ export async function resolveInference(
     if (openai.isAvailable()) {
       return {
         inference: openai,
-        note: `OpenAI API brain selected (model ${env.PARAM_OPENAI_MODEL ?? "gpt-4o-mini"})`,
+        note: `OpenAI API brain selected (model ${env.PARAM_OPENAI_MODEL?.trim() || "gpt-4o-mini"})`,
       };
     }
     if (mode === "openai") {

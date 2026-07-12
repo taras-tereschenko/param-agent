@@ -35,6 +35,25 @@ describe("resolveInference (brain selection)", () => {
     expect(r.inference.name).toBe("openai");
   });
 
+  test("empty PARAM_ACTOR is treated as auto (not a broken mode)", async () => {
+    // .env writes `PARAM_ACTOR=` (empty string). It must behave like auto and
+    // still select a real brain — regression for the `??` vs `||` bug that left
+    // the codex/openai deployment with no brain.
+    const r = await resolveInference(makeConfig(), {
+      PARAM_ACTOR: "",
+      OPENAI_API_KEY: "sk-test",
+    });
+    expect(r.inference.name).toBe("openai");
+
+    // Whitespace-only is also auto; with no brain in production it hard-fails
+    // (proving it reached the auto path, not a silent no-op mode).
+    await expect(
+      resolveInference(makeConfig({ environment: "production" }), {
+        PARAM_ACTOR: "   ",
+      }),
+    ).rejects.toThrow(/no real Session Actor brain/);
+  });
+
   test("PARAM_ACTOR=openai without a key -> hard fail", async () => {
     await expect(
       resolveInference(makeConfig(), { PARAM_ACTOR: "openai" }),
