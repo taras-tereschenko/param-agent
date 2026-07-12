@@ -435,28 +435,40 @@ UNIT
   fi
 fi
 
-log "Bootstrap complete."
 if [ "$SERVICES_UP" -eq 1 ]; then
+  log "Bootstrap complete — Param is LIVE."
 cat <<EOF
 
-Param is up and running as a service. DM your bot on Telegram — it should reply.
-  systemctl status param-worker      # worker: Telegram polling + actor runs
-  journalctl -u param-worker -f      # live logs
-  sudo systemctl restart|stop param-worker param-app
+✅ Param is up and running as a service. DM your bot on Telegram — it should reply.
+   systemctl status param-worker      # worker: Telegram polling + actor runs
+   journalctl -u param-worker -f      # live logs
+   sudo systemctl restart|stop param-worker param-app
 
 Hardening (dedicated user, Tailscale, firewall): docs/DEPLOY_VPS.md
 EOF
 else
+  # Not live. Say exactly WHAT is incomplete — no generic checklist.
+  warn "Bootstrap finished but Param is NOT live yet."
+  if [ "$RUN_SETUP" -eq 0 ]; then
 cat <<EOF
 
-Next steps:
-  cd $TARGET_DIR
-$([ "$RUN_SETUP" -eq 0 ] && echo "  bun run setup                 # configure (owner id, bot token, OpenAI key)")
-$([ "$DB_READY" -eq 0 ] && echo "  bun run db:migrate && bun run db:check   # once Postgres+pgvector is available")
-  # brain: set OPENAI_API_KEY in .env (recommended), or 'codex login'
-  bun run start:worker          # polling + jobs + actor runs (foreground to test)
-  bun run start                 # Hono app (health endpoints)
-
-Systemd units + hardening: docs/DEPLOY_VPS.md
+Config wasn't created (no interactive terminal). Finish it:
+  cd $TARGET_DIR && bun run setup && bun run doctor
 EOF
+  elif [ "$DB_READY" -eq 0 ]; then
+cat <<EOF
+
+The database isn't ready. Provision Postgres+pgvector, then:
+  cd $TARGET_DIR && bun run db:migrate && bun run db:check
+EOF
+  else
+cat <<EOF
+
+The brain check above did not pass, so the services were deliberately held back
+(a silently mute bot is worse than a clear failure). The brain-check output
+above shows the exact reason. Once addressed:
+  cd $TARGET_DIR && bun run brain:check          # confirm the brain replies
+  ${SUDO:+$SUDO }systemctl start param-worker param-app
+EOF
+  fi
 fi

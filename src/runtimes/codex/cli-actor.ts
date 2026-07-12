@@ -162,6 +162,10 @@ export class CodexCliActor implements ActorInference {
     if (res.exitCode !== 0) {
       log.warn("codex cli exited non-zero; staying quiet", {
         exitCode: res.exitCode,
+        // Surface the real error so a broken invocation is diagnosable in one
+        // run (auth/prompt/flag problems show here) instead of a silent quiet.
+        stderrHead: res.stderr.slice(0, 800),
+        stdoutHead: res.stdout.slice(0, 400),
       });
       return { drafts: SAFE_FALLBACK, provider: "codex-cli" };
     }
@@ -170,6 +174,9 @@ export class CodexCliActor implements ActorInference {
     if (drafts.length === 0) {
       log.warn("codex cli produced no valid outputs; staying quiet", {
         errors: errors.slice(0, 3),
+        // The raw output shows HOW codex replied (prose vs JSON, wrapper text,
+        // banners) so the exec invocation / parser can be tuned precisely.
+        stdoutHead: res.stdout.slice(0, 800),
       });
       return { drafts: SAFE_FALLBACK, provider: "codex-cli" };
     }
