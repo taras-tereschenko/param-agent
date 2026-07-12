@@ -236,9 +236,14 @@ SQL
       die "could not enable the pgvector 'vector' extension in the 'param' database; install the pgvector package for your Postgres (e.g. postgresql-${PGV:-NN}-pgvector) and re-run"
     fi
     log "running migrations"
-    bun run db:migrate
-    bun run db:check
-    DB_READY=1
+    # Guard under `set -e`: a bare failure here would abort the whole script
+    # with a raw stack trace, skipping the brain/service steps AND the tailored
+    # DB-failure guidance below. Handle it so the run ends with a clear status.
+    if bun run db:migrate && bun run db:check; then
+      DB_READY=1
+    else
+      warn "database migrate/check failed — see the error above. Once Postgres+pgvector is healthy: cd $TARGET_DIR && bun run db:migrate && bun run db:check"
+    fi
   else
     warn "DATABASE_URL has no usable password (peer-auth, or a malformed % escape); skipping automatic role/DB provisioning. Create the 'param' role + database yourself (see docs/DEPLOY_VPS.md), then run 'bun run db:migrate && bun run db:check'."
   fi

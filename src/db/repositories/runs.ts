@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, lte } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
 
 import type { ParamDb } from "../client";
 import { actorOutputs, actorRuns, deliveryAttempts } from "../schema";
@@ -76,9 +76,15 @@ export async function setRunSnapshot(
     .update(actorRuns)
     .set({
       promptSnapshotRef: input.promptSnapshotRef,
-      metadata: input.snapshot
-        ? ({ promptSnapshot: input.snapshot } as Record<string, unknown>)
-        : undefined,
+      // MERGE into metadata (jsonb ||), don't overwrite — a plain replace wiped
+      // sibling keys like continuationDepth (which bounds the agentic loop).
+      ...(input.snapshot
+        ? {
+            metadata: sql`coalesce(${actorRuns.metadata}, '{}'::jsonb) || ${JSON.stringify(
+              { promptSnapshot: input.snapshot },
+            )}::jsonb`,
+          }
+        : {}),
       updatedAt: new Date(),
     })
     .where(eq(actorRuns.id, runId));

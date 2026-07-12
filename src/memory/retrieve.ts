@@ -67,7 +67,15 @@ export async function retrieveMemories(
   limit = 8,
   provider?: MaybeEmbeddingProvider,
 ): Promise<MemoryView[]> {
-  const filters = buildRetrievalScopeFilters(ctx);
+  // Drop any filter whose subjectRef has no truthy identifying value: an empty
+  // `{}` would make `subject_ref @> '{}'` match EVERY row (all scopes/all
+  // users). Not reachable today (ids are always set) but a hard guard against a
+  // future caller producing an empty subjectRef.
+  const filters = buildRetrievalScopeFilters(ctx).filter((filter) =>
+    Object.values(filter.subjectRef).some(
+      (v) => typeof v === "string" && v.length > 0,
+    ),
+  );
   if (filters.length === 0) {
     return [];
   }

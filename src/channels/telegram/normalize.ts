@@ -165,7 +165,7 @@ function mapMentions(
       mentions.push({
         text: segment || `@${username}`,
         username: username || undefined,
-        isParam: !!ctx.botUsername && username === ctx.botUsername,
+        isParam: usernamesEqual(username, ctx.botUsername),
       });
     } else if (entity.type === "text_mention" && entity.user) {
       const segment =
@@ -184,32 +184,49 @@ function mapMentions(
   return mentions.length > 0 ? mentions : undefined;
 }
 
+/** Telegram usernames resolve case-insensitively; compare accordingly. */
+function usernamesEqual(a: string | undefined, b: string | undefined): boolean {
+  return !!a && !!b && a.toLowerCase() === b.toLowerCase();
+}
+
+/**
+ * Does the text contain a real @mention of `username`? Word-boundary aware so
+ * `@param` does NOT match `@param_ai` (a different username), and
+ * case-insensitive. Usernames are [A-Za-z0-9_], so the next char must not be one.
+ */
+function textMentionsUsername(text: string, username: string): boolean {
+  const re = new RegExp(`@${username.replace(/[^A-Za-z0-9_]/g, "")}(?![A-Za-z0-9_])`, "i");
+  return re.test(text);
+}
+
 function detectMentionsParam(
   text: string | undefined,
   entities: TelegramMessageEntity[] | undefined,
   ctx: NormalizeContext,
 ): boolean {
-  if (ctx.botUsername && text && text.includes(`@${ctx.botUsername}`)) {
-    return true;
-  }
-  if (!entities) {
-    return false;
-  }
-  for (const entity of entities) {
-    if (entity.type === "mention" && ctx.botUsername && text) {
-      const segment = text.slice(entity.offset, entity.offset + entity.length);
-      if (segment === `@${ctx.botUsername}` || segment === ctx.botUsername) {
+  // Prefer precise entity-based detection; the raw-text check is a
+  // boundary-aware, case-insensitive fallback (no @param_ai false positives).
+  if (entities && text) {
+    for (const entity of entities) {
+      if (entity.type === "mention") {
+        const segment = text.slice(entity.offset, entity.offset + entity.length);
+        const name = segment.startsWith("@") ? segment.slice(1) : segment;
+        if (usernamesEqual(name, ctx.botUsername)) {
+          return true;
+        }
+      }
+      if (
+        entity.type === "text_mention" &&
+        ctx.botUserId &&
+        entity.user &&
+        String(entity.user.id) === ctx.botUserId
+      ) {
         return true;
       }
     }
-    if (
-      entity.type === "text_mention" &&
-      ctx.botUserId &&
-      entity.user &&
-      String(entity.user.id) === ctx.botUserId
-    ) {
-      return true;
-    }
+  }
+  if (ctx.botUsername && text && textMentionsUsername(text, ctx.botUsername)) {
+    return true;
   }
   return false;
 }

@@ -76,15 +76,21 @@ export function evaluateTelegramAccess(
       const topicEntriesForChat = lists.allowedTopicIds.filter(
         (t) => t.chatId === ctx.chatId,
       );
-      if (inTopic && topicEntriesForChat.length > 0) {
-        const match = topicEntriesForChat.some(
-          (t) => t.topicId === ctx.messageThreadId,
-        );
+      if (topicEntriesForChat.length > 0) {
+        // The operator restricted this chat to specific topics. A message must
+        // be in one of them — and a no-thread ("General") message is NOT in an
+        // allow-listed topic, so it is denied too (previously it slipped through
+        // the group allow-list, leaking the General topic).
+        const match =
+          inTopic &&
+          topicEntriesForChat.some((t) => t.topicId === ctx.messageThreadId);
         if (!match) {
           return {
             allowed: false,
-            reason: `topic ${ctx.messageThreadId} in chat ${ctx.chatId} is not allow-listed`,
-            routeType: "topic",
+            reason: inTopic
+              ? `topic ${ctx.messageThreadId} in chat ${ctx.chatId} is not allow-listed`
+              : `chat ${ctx.chatId} is restricted to specific topics; the General topic is not allow-listed`,
+            routeType: inTopic ? "topic" : routeType,
           };
         }
         return {

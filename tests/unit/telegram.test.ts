@@ -149,6 +149,15 @@ describe("evaluateTelegramAccess", () => {
     );
     expect(denied.allowed).toBe(false);
     expect(denied.routeType).toBe("topic");
+
+    // A no-thread ("General") message in a topic-restricted chat is NOT in an
+    // allow-listed topic, so it must be denied too (not slip through the group
+    // allow-list).
+    const general = evaluateTelegramAccess(
+      { chatType: "supergroup", chatId: "-100" },
+      lists,
+    );
+    expect(general.allowed).toBe(false);
   });
 
   test("allows any topic in an allowed group when no topics are listed", () => {
@@ -219,6 +228,40 @@ describe("normalizeTelegramUpdate", () => {
     expect(mechanical.isGroupMessage).toBe(true);
     const mentions = inbound.payload.mentions as { isParam: boolean }[];
     expect(mentions[0]?.isParam).toBe(true);
+  });
+
+  test("does NOT false-positive @parambot_extra as a mention of @parambot", () => {
+    const update = {
+      update_id: 1021,
+      message: {
+        message_id: 1021,
+        date: 1_700_000_000,
+        chat: { id: -100, type: "supergroup" },
+        from: { id: 111, is_bot: false, first_name: "User" },
+        text: "hey @parambot_extra look",
+        entities: [{ type: "mention", offset: 4, length: 15 }],
+      },
+    } as unknown as TelegramUpdate;
+    const inbound = normalizeTelegramUpdate(update, ctx) as NormalizedInbound;
+    const mechanical = inbound.payload.mechanical as Record<string, boolean>;
+    expect(mechanical.mentionsParam).toBe(false);
+  });
+
+  test("detects a case-insensitive bot mention (@ParamBot)", () => {
+    const update = {
+      update_id: 1022,
+      message: {
+        message_id: 1022,
+        date: 1_700_000_000,
+        chat: { id: -100, type: "supergroup" },
+        from: { id: 111, is_bot: false, first_name: "User" },
+        text: "hey @ParamBot help",
+        entities: [{ type: "mention", offset: 4, length: 9 }],
+      },
+    } as unknown as TelegramUpdate;
+    const inbound = normalizeTelegramUpdate(update, ctx) as NormalizedInbound;
+    const mechanical = inbound.payload.mechanical as Record<string, boolean>;
+    expect(mechanical.mentionsParam).toBe(true);
   });
 
   test("detects a reply to the bot", () => {
