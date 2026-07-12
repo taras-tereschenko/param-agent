@@ -9,6 +9,16 @@ import { taskRuns } from "../schema";
  * honest outcome (error preserved).
  */
 export const taskRunsRepository = {
+  /** Current status of a task run (for the job-retry idempotency guard). */
+  async getStatus(db: ParamDb, id: string): Promise<string | undefined> {
+    const rows = await db
+      .select({ status: taskRuns.status })
+      .from(taskRuns)
+      .where(eq(taskRuns.id, id))
+      .limit(1);
+    return rows[0]?.status;
+  },
+
   async markRunning(db: ParamDb, id: string): Promise<void> {
     await db
       .update(taskRuns)

@@ -1,8 +1,20 @@
+import { timingSafeEqual } from "node:crypto";
+
 import { type Context, Hono, type Next } from "hono";
 
 import { getDb } from "../db/client";
 import { checkSystemHealth } from "../ops/health";
 import { enqueueJob } from "../orchestrator/run-queue";
+
+/** Constant-time string compare (length-guarded) to avoid a timing side-channel. */
+function secretEquals(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) {
+    return false;
+  }
+  return timingSafeEqual(ab, bb);
+}
 
 /**
  * The Hono HTTP surface. The app process does NOT run long actor work: it
@@ -19,7 +31,8 @@ export function createApp() {
   const operatorToken = process.env.PARAM_OPERATOR_TOKEN;
   const requireOperatorAuth = async (c: Context, next: Next) => {
     if (operatorToken) {
-      if (c.req.header("authorization") !== `Bearer ${operatorToken}`) {
+      const header = c.req.header("authorization") ?? "";
+      if (!secretEquals(header, `Bearer ${operatorToken}`)) {
         return c.json({ ok: false, error: "unauthorized" }, 401);
       }
     }
@@ -65,7 +78,7 @@ export function createApp() {
         503,
       );
     }
-    if (c.req.header("x-telegram-bot-api-secret-token") !== secret) {
+    if (!secretEquals(c.req.header("x-telegram-bot-api-secret-token") ?? "", secret)) {
       return c.json({ ok: false, error: "unauthorized" }, 401);
     }
     const account = c.req.param("account");

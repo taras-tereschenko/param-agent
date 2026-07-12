@@ -184,6 +184,11 @@ export function buildTaskExecutors(
 ): TaskRuntimeRegistry {
   const executors: TaskRuntimeExecutor[] = [];
   const scrubbed = scrubbedCliEnv(env);
+  // Task children authenticate via their own login (codex uses CODEX_HOME;
+  // opencode its own auth) — do NOT hand a spawned task runtime the org
+  // OPENAI_API_KEY, so a compromised/misbehaving task can't exfiltrate it. The
+  // chat brain still receives it via resolveInference where it's actually used.
+  delete scrubbed.OPENAI_API_KEY;
   const runtimes = config.runtimes ?? {};
   // Non-interactive subcommand per runtime (codex `exec`, opencode `run`).
   const defaultArgs: Record<string, string[]> = {

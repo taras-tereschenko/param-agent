@@ -98,6 +98,21 @@ export async function ensureSemanticIndexes(db: ParamDb): Promise<void> {
   await db.execute(
     sql`create index if not exists memory_records_embedding_ivfflat on memory_records using ivfflat (embedding vector_cosine_ops) with (lists = 100)`,
   );
+  // Raise ivfflat recall: the default probes=1 scans a single list and misses
+  // relevant neighbours. Set it at the database level so every connection picks
+  // it up. current_database() is trusted (not user input); quotes are doubled
+  // defensively for the identifier.
+  const rows = await db.execute<{ dbname: string }>(
+    sql`select current_database() as dbname`,
+  );
+  const dbname = rows[0]?.dbname;
+  if (dbname) {
+    await db.execute(
+      sql.raw(
+        `alter database "${dbname.replace(/"/g, '""')}" set ivfflat.probes = 10`,
+      ),
+    );
+  }
 }
 
 export async function listMissingExtendedDatabaseTables(

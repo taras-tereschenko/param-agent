@@ -18,8 +18,18 @@ export function isPrivateHost(hostname: string): boolean {
   ) {
     return true;
   }
-  // IPv6 loopback / unique-local (fc00::/7).
-  if (host === "::1" || host.startsWith("fc") || host.startsWith("fd")) {
+  // IPv6 loopback (::1), unspecified (::), unique-local (fc00::/7), and
+  // link-local (fe80::/10, incl. the cloud metadata range).
+  if (
+    host === "::1" ||
+    host === "::" ||
+    host.startsWith("fc") ||
+    host.startsWith("fd") ||
+    host.startsWith("fe80") ||
+    host.startsWith("fe9") ||
+    host.startsWith("fea") ||
+    host.startsWith("feb")
+  ) {
     return true;
   }
   // IPv4-mapped IPv6 (::ffff:a.b.c.d) -> re-check the embedded IPv4.

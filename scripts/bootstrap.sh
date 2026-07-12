@@ -354,6 +354,9 @@ if command -v systemctl >/dev/null 2>&1 && [ -f .env ] \
   && { [ "$(id -u)" -eq 0 ] || [ -n "$SUDO" ]; }; then
   log "installing systemd services (param-worker, param-app)"
   RUN_USER="$(id -un)"
+  if [ "$(id -u)" -eq 0 ]; then
+    warn "installing as root: param-worker/param-app (and the agent brain) will run as root. For a hardened setup, create a dedicated non-root user (see docs/DEPLOY_VPS.md)."
+  fi
   BUN_BIN="$BUN_INSTALL/bin/bun"
   SVC_PATH="$BUN_INSTALL/bin:$HOME/.codex/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
   # The codex brain reads its subscription auth from CODEX_HOME (~/.codex).

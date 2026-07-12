@@ -24,6 +24,8 @@ describe("SSRF url safety (hardened)", () => {
       "172.16.0.1",
       "169.254.169.254",
       "::1",
+      "::",
+      "fe80::1",
       "0x7f000001",
       "2130706433",
       "::ffff:169.254.169.254",
@@ -48,6 +50,9 @@ describe("secret redaction (hardened)", () => {
       "<redacted>",
     );
     expect(redactString("key sk-ABCDEFGH12345678")).toContain("<redacted>");
+    // Modern hyphenated keys (sk-proj-…) must also be masked.
+    const projKey = "sk-proj-abcDEF123_ghiJKL456-mnoPQR789";
+    expect(redactString(`OPENAI_API_KEY=${projKey}`)).not.toContain(projKey);
   });
 });
 
@@ -106,6 +111,16 @@ describe("over-length handling", () => {
     );
     const params = buildSendMessageParams(huge, { chatId: "1" });
     expect(params.text.length).toBeLessThanOrEqual(TELEGRAM_MAX_MESSAGE_LENGTH);
+  });
+
+  test("truncation never leaves a lone (broken) surrogate at the cut", () => {
+    // Fill so the cut lands exactly on the high surrogate of a 😀 (D83D DE00).
+    const emoji = "😀";
+    const head = "a".repeat(TELEGRAM_MAX_MESSAGE_LENGTH - 2);
+    const out = truncateForTelegram(`${head}${emoji}${emoji}`);
+    const lastReal = out.slice(0, -1); // drop the appended ellipsis
+    const lastCode = lastReal.charCodeAt(lastReal.length - 1);
+    expect(lastCode >= 0xd800 && lastCode <= 0xdbff).toBe(false);
   });
 });
 

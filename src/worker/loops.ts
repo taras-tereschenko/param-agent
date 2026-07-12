@@ -254,6 +254,12 @@ async function maybeHandleApprovalReply(
   if (resolution.status === "approved" && resolution.action) {
     await executeApprovedAction(deps, ctx.sessionId, resolution.action);
   }
+  // Re-wake the actor so it acknowledges the OUTCOME to the user — the executed
+  // result on approve, or "ok, skipping that" on deny — instead of silently
+  // dropping the interaction after the approval decision.
+  if (resolution.status === "approved" || resolution.status === "rejected") {
+    await wakeActorForResult(deps, ctx.sessionId);
+  }
   return true;
 }
 
@@ -305,6 +311,12 @@ async function maybeHandleApprovalCallback(
   });
   if (resolution.status === "approved" && resolution.action) {
     await executeApprovedAction(deps, ctx.sessionId, resolution.action);
+  }
+  // Re-wake the actor so it acknowledges the OUTCOME to the user — the executed
+  // result on approve, or "ok, skipping that" on deny — instead of silently
+  // dropping the interaction after the approval decision.
+  if (resolution.status === "approved" || resolution.status === "rejected") {
+    await wakeActorForResult(deps, ctx.sessionId);
   }
   return true;
 }
@@ -465,6 +477,20 @@ async function dispatchJob(
       const taskSessionId = job.payload.taskSessionId as string | undefined;
       const plan = job.payload.plan as TaskRunPlan | undefined;
       if (!parentSessionId || !taskRunId) {
+        return;
+      }
+
+      // Idempotency guard for job retries: if this task run already reached a
+      // terminal state on a prior attempt, do NOT re-run the (possibly
+      // expensive/side-effecting) CLI. The task.result was already ingested
+      // (deduped); just re-wake the parent to report it.
+      const priorStatus = await taskRunsRepository.getStatus(deps.db, taskRunId);
+      if (
+        priorStatus === "completed" ||
+        priorStatus === "failed" ||
+        priorStatus === "cancelled"
+      ) {
+        await wakeActorForResult(deps, parentSessionId);
         return;
       }
 

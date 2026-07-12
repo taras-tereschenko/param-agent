@@ -256,7 +256,10 @@ async function dispatchToolCall(
     status: "blocked",
     error: { code: "denied", message: decision.reason },
   });
-  return false;
+  // Return true so the actor is re-woken (depth-bounded) to SEE the blocked
+  // result and acknowledge it to the user ("I can't do that") instead of
+  // silently dropping the interaction. No tool ran, but there's a result to act on.
+  return true;
 }
 
 async function executeTool(

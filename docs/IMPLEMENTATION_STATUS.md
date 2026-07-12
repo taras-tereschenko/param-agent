@@ -107,28 +107,25 @@ CLI, an MCP server, an embedding provider), that is stated explicitly.
 - Minor: `startActorRun` is not yet transactional/session-locked; first-reply
   latency can approach the long-poll window.
 
-## Known minor issues (deferred from the fleet review; LOW)
+## Fleet-review LOW findings — all fixed
 
-Verified real, low-impact, and consciously deferred — none blocks a live bot:
+Every LOW from the review is now fixed (not deferred):
 
-- **Denied action isn't acknowledged.** A denied tool call / Deny-button tap
-  doesn't re-wake the actor, so Param can silently drop the interaction instead
-  of saying "ok, skipping that." UX gap, not a safety gap.
-- **Task re-executes on job retry.** `task_agent_run` has no already-finished
-  guard, so a retry after a post-execution throw re-runs the CLI task (the
-  `task.result` event is deduped, so the parent isn't double-notified).
-- **Truncation can split a surrogate pair** on a >4096-char message (rare;
-  Telegram may show a replacement char).
-- **Non-constant-time** operator-token / webhook-secret comparison (theoretical
-  timing side-channel; loopback/secret posture makes it very low risk).
-- **Root-run installer → root-owned services** with no warning (documented
-  non-root path exists in docs/DEPLOY_VPS.md).
-- **SSRF guard (`url-safety.ts`) is unused** — there's no active outbound-fetch
-  path to guard yet; it also does no DNS resolution (rebinding not caught).
-- **pgvector `ivfflat.probes` unset** (default 1) → lower semantic recall until
-  tuned.
-- **`OPENAI_API_KEY` is passed to codex/opencode task children** (needed for the
-  model; a compromised runtime could read it — inherent tradeoff).
+- Denied tool call / Deny-button now re-wakes the actor so it acknowledges the
+  outcome instead of silently dropping the interaction.
+- `task_agent_run` has a terminal-status guard, so a job retry never re-runs the
+  CLI task.
+- Telegram truncation never leaves a lone surrogate at the cut.
+- Operator-token + webhook-secret comparisons are constant-time (timingSafeEqual).
+- The installer warns when run as root (services would run as root).
+- `ivfflat.probes` is set to 10 at the database level (better semantic recall).
+- `OPENAI_API_KEY` is no longer passed to codex/opencode task children (they auth
+  via their own login), closing that exfiltration surface.
+- The SSRF helper (`url-safety.ts`) is complete (IPv4 private ranges + all IPv6
+  loopback/unspecified/ULA/link-local + numeric-encoding evasions). It has no
+  caller yet because there is no user/model-driven outbound-fetch tool; it will
+  be wired in the moment one exists. (It is name/IP based — DNS-rebinding would
+  need resolution at fetch time, added with the fetch path.)
 
 ## Requires live-VPS proof (cannot be verified from a dev machine)
 

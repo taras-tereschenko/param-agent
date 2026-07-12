@@ -27,7 +27,14 @@ export function truncateForTelegram(text: string): string {
   if (text.length <= TELEGRAM_MAX_MESSAGE_LENGTH) {
     return text;
   }
-  return `${text.slice(0, TELEGRAM_MAX_MESSAGE_LENGTH - 1)}…`;
+  let cut = text.slice(0, TELEGRAM_MAX_MESSAGE_LENGTH - 1);
+  // Don't end on a lone high surrogate — slicing mid-pair would emit a broken
+  // code unit that Telegram may reject or render as a replacement char.
+  const lastCode = cut.charCodeAt(cut.length - 1);
+  if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
+    cut = cut.slice(0, -1);
+  }
+  return `${cut}…`;
 }
 
 export function buildSendMessageParams(
