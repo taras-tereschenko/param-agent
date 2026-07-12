@@ -12,7 +12,7 @@ import { CodexAdapter } from "../../src/runtimes/codex/adapter";
 import { CodexChatBrain } from "../../src/runtimes/codex/chat-brain";
 import {
   CodexCliActor,
-  extractOutputArray,
+  findBalancedArrays,
   type CliRunner,
 } from "../../src/runtimes/codex/cli-actor";
 import { OpenCodeAdapter } from "../../src/runtimes/opencode/adapter";
@@ -118,11 +118,14 @@ describe("CodexChatBrain honest fallback", () => {
 });
 
 describe("CodexCliActor output handling", () => {
-  test("extractOutputArray pulls the JSON array out of surrounding prose", () => {
-    expect(
-      extractOutputArray('here you go:\n[{"type":"done","payload":{}}]\ncheers'),
-    ).toBe('[{"type":"done","payload":{}}]');
-    expect(extractOutputArray('[{"type":"done"}]')).toBe('[{"type":"done"}]');
+  test("findBalancedArrays extracts arrays even when prose contains brackets", () => {
+    // "see [1]" must NOT corrupt extraction of the real actor array.
+    const spans = findBalancedArrays(
+      'see [1] then:\n[{"type":"message","payload":{"text":"a[b]c"}}]\nbye',
+    );
+    // The actor array (the substantial one) is present and intact, including
+    // the bracket inside the JSON string value.
+    expect(spans).toContain('[{"type":"message","payload":{"text":"a[b]c"}}]');
   });
 
   test("run() returns the message even when codex wraps the JSON in prose", async () => {
@@ -187,6 +190,35 @@ describe("CodexCliActor output handling", () => {
     );
     expect(res.drafts.some((d) => d.type === "message")).toBe(false);
     expect(res.drafts.some((d) => d.type === "no_reply")).toBe(true);
+  });
+
+  test("preamble prose does NOT override an intentional no_reply", async () => {
+    // Reviewer bug #1: reasoning around a non-message decision must not be
+    // posted as a message and must not discard the decision.
+    const res = await runActor(
+      'I should stay quiet here.\n[{"type":"no_reply","payload":{"reason":"not_my_moment"}},{"type":"done","payload":{"status":"completed"}}]',
+    );
+    expect(res.drafts.some((d) => d.type === "message")).toBe(false);
+    expect(res.drafts.some((d) => d.type === "no_reply")).toBe(true);
+  });
+
+  test("a real reply containing brackets is preserved (not corrupted)", async () => {
+    // Reviewer bug #2: greedy bracket-stripping used to drop bracketed content.
+    const res = await runActor(
+      '[{"type":"message","payload":{"text":"the values are [1, 2, 3]"}},{"type":"done","payload":{"status":"completed"}}]',
+    );
+    const msg = res.drafts.find((d) => d.type === "message");
+    expect(msg && msg.type === "message" ? msg.payload.text : "").toBe(
+      "the values are [1, 2, 3]",
+    );
+  });
+
+  test("pure-prose reply containing brackets keeps them", async () => {
+    const res = await runActor("sure, use [foo] and {bar} like that");
+    const msg = res.drafts.find((d) => d.type === "message");
+    expect(msg && msg.type === "message" ? msg.payload.text : "").toContain(
+      "[foo]",
+    );
   });
 });
 

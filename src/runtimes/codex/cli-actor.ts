@@ -35,7 +35,7 @@ const OUTPUT_INSTRUCTION = [
   "For a normal chat turn you MUST include at least one message output with your",
   'actual reply text, THEN end with {"type":"done","payload":{"status":"completed"}}.',
   "Example of a normal reply:",
-  '[{"type":"message","payload":{"text":"hey, yeah I\'m around — what\'s up?"}},{"type":"done","payload":{"status":"completed"}}]',
+  '[{"type":"message","payload":{"text":"hey, yeah i\'m around. what\'s up?"}},{"type":"done","payload":{"status":"completed"}}]',
   '"done" on its own is NOT a reply. Only omit the message when the situation',
   "genuinely needs no response, and then say so explicitly:",
   '[{"type":"no_reply","payload":{"reason":"nothing_to_add"}},{"type":"done","payload":{"status":"completed"}}]',
@@ -100,26 +100,64 @@ const SAFE_FALLBACK: ActorOutputDraft[] = [
 ];
 
 /**
- * codex exec may wrap the JSON array in reasoning/prose. Extract the array so
- * the parser (which JSON.parses the whole string) doesn't fail on surrounding
- * text: if the output isn't already pure JSON / a code fence, slice from the
- * first `[` to the last `]`. Falls back to the raw text unchanged.
+ * Find every top-level, balanced `[ ... ]` span in the text (string-aware, so
+ * brackets inside JSON string values don't confuse the matcher). Used to pull
+ * codex's actor-output array out of any surrounding prose WITHOUT the
+ * first-`[`-to-last-`]` corruption that bracketed prose (e.g. "see [1]") caused.
  */
-export function extractOutputArray(stdout: string): string {
-  const trimmed = stdout.trim();
-  if (
-    trimmed.startsWith("[") ||
-    trimmed.startsWith("{") ||
-    trimmed.startsWith("```")
-  ) {
-    return trimmed;
+export function findBalancedArrays(text: string): string[] {
+  const spans: string[] = [];
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] !== "[") continue;
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for (let j = i; j < text.length; j += 1) {
+      const c = text[j];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (c === "\\") esc = true;
+        else if (c === '"') inStr = false;
+        continue;
+      }
+      if (c === '"') inStr = true;
+      else if (c === "[") depth += 1;
+      else if (c === "]") {
+        depth -= 1;
+        if (depth === 0) {
+          spans.push(text.slice(i, j + 1));
+          i = j; // don't restart inside this span
+          break;
+        }
+      }
+    }
   }
-  const start = trimmed.indexOf("[");
-  const end = trimmed.lastIndexOf("]");
-  if (start >= 0 && end > start) {
-    return trimmed.slice(start, end + 1);
+  return spans;
+}
+
+/**
+ * Parse codex output into actor drafts, robust to surrounding prose/reasoning.
+ * Tries the whole output first (pure JSON / code fence), then each balanced
+ * `[...]` span (largest first — the actor array is the substantial one),
+ * returning the first that yields ≥1 valid draft plus the matched text (so the
+ * caller can subtract it when recovering a prose reply).
+ */
+export function parseCodexOutputs(stdout: string): {
+  drafts: ActorOutputDraft[];
+  matched?: string;
+} {
+  const whole = parseActorOutputs(stdout);
+  if (whole.drafts.length > 0) {
+    return { drafts: whole.drafts, matched: stdout.trim() };
   }
-  return trimmed;
+  const spans = findBalancedArrays(stdout).sort((a, b) => b.length - a.length);
+  for (const span of spans) {
+    const parsed = parseActorOutputs(span);
+    if (parsed.drafts.length > 0) {
+      return { drafts: parsed.drafts, matched: span };
+    }
+  }
+  return { drafts: [] };
 }
 
 export type CodexCliActorOptions = {
@@ -198,18 +236,22 @@ export class CodexCliActor implements ActorInference {
       return { drafts: SAFE_FALLBACK, provider: "codex-cli" };
     }
 
-    const arrayText = extractOutputArray(res.stdout);
-    const { drafts, errors } = parseActorOutputs(arrayText);
-    const hasMessage = drafts.some((d) => d.type === "message");
+    const { drafts, matched } = parseCodexOutputs(res.stdout);
 
-    // codex is a chat model and may reply in PLAIN PROSE instead of the JSON
-    // format. Never drop that: if no structured message was parsed, wrap any
-    // prose codex produced as the reply so the bot actually talks. (When codex
-    // returned ONLY `[{done}]` there is no prose, so this correctly stays quiet
-    // and the strengthened OUTPUT_INSTRUCTION is what makes it emit a message.)
-    if (!hasMessage) {
+    // Only recover a prose reply when the model gave us NOTHING actionable —
+    // i.e. drafts are empty or contain only `done`. Never override an explicit
+    // no_reply / tool_call / react / spawn that codex intentionally emitted,
+    // even if it also printed reasoning prose around it.
+    const onlyDoneOrEmpty =
+      drafts.length === 0 || drafts.every((d) => d.type === "done");
+    if (onlyDoneOrEmpty) {
+      // codex is a chat model and may reply in PLAIN PROSE instead of the JSON
+      // format (or add a `done` with no message). Deliver that prose so the bot
+      // actually talks. Subtract the matched JSON so we don't echo it; if codex
+      // returned ONLY `[{done}]` there is no prose and this stays quiet (the
+      // strengthened OUTPUT_INSTRUCTION is what makes it emit a message).
       const prose = plainReplyText(
-        drafts.length === 0 ? res.stdout : res.stdout.replace(arrayText, " "),
+        matched ? res.stdout.replace(matched, " ") : res.stdout,
       );
       if (prose) {
         // Build through the parser so the message payload gets its schema
@@ -226,26 +268,15 @@ export class CodexCliActor implements ActorInference {
 
     if (drafts.length === 0) {
       log.warn("codex cli produced no valid outputs; staying quiet", {
-        errors: errors.slice(0, 3),
         // The raw output shows HOW codex replied (prose vs JSON, wrapper text,
         // banners) so the exec invocation / parser can be tuned precisely.
         stdoutHead: res.stdout.slice(0, 800),
       });
       return { drafts: SAFE_FALLBACK, provider: "codex-cli" };
     }
-    // Parsed, but the model closed the turn with only `done`/nothing to say and
-    // wrote no prose — log the raw output so a mis-following model is
-    // diagnosable in one run (the actor will simply stay quiet).
-    const hasReplyOrAction = drafts.some(
-      (d) =>
-        d.type === "message" ||
-        d.type === "react_to_message" ||
-        d.type === "render_ui" ||
-        d.type === "no_reply" ||
-        d.type === "tool_call" ||
-        d.type === "spawn_task_agent",
-    );
-    if (!hasReplyOrAction) {
+    if (onlyDoneOrEmpty) {
+      // Parsed only `done` with no prose to recover — log so a mis-following
+      // model is diagnosable in one run (the actor will simply stay quiet).
       log.warn("codex cli returned no message/action (only done); staying quiet", {
         stdoutHead: res.stdout.slice(0, 800),
       });
@@ -261,12 +292,11 @@ export class CodexCliActor implements ActorInference {
  * usable remains (so a done-only turn stays quiet rather than sending noise).
  */
 export function plainReplyText(text: string): string {
-  const cleaned = text
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/\[[\s\S]*\]/g, " ")
-    .replace(/\{[\s\S]*\}/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  // Strip code fences only — do NOT strip brackets/braces: a real reply can
+  // contain them ("the values are [1, 2, 3]") and greedy stripping silently
+  // dropped that content. The JSON actor-array, when present, is already
+  // subtracted by the caller (via the matched span).
+  const cleaned = text.replace(/```[\s\S]*?```/g, " ").replace(/\s+/g, " ").trim();
   if (cleaned.length < 2 || cleaned.length > 4000) {
     return "";
   }
