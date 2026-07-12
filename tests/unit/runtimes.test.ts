@@ -10,6 +10,11 @@ import {
 } from "../../src/runtimes/capabilities";
 import { CodexAdapter } from "../../src/runtimes/codex/adapter";
 import { CodexChatBrain } from "../../src/runtimes/codex/chat-brain";
+import {
+  CodexCliActor,
+  extractOutputArray,
+  type CliRunner,
+} from "../../src/runtimes/codex/cli-actor";
 import { OpenCodeAdapter } from "../../src/runtimes/opencode/adapter";
 import { AntigravityAdapter } from "../../src/runtimes/antigravity/adapter";
 import { RuntimeRegistry } from "../../src/runtimes/registry";
@@ -109,6 +114,35 @@ describe("CodexChatBrain honest fallback", () => {
     // since run() always throws — that would fail every turn. Report unusable.
     const brain = new CodexChatBrain({ probe: fakeProbe({ ok: true }) });
     expect(await brain.isAvailable()).toBe(false);
+  });
+});
+
+describe("CodexCliActor output handling", () => {
+  test("extractOutputArray pulls the JSON array out of surrounding prose", () => {
+    expect(
+      extractOutputArray('here you go:\n[{"type":"done","payload":{}}]\ncheers'),
+    ).toBe('[{"type":"done","payload":{}}]');
+    expect(extractOutputArray('[{"type":"done"}]')).toBe('[{"type":"done"}]');
+  });
+
+  test("run() returns the message even when codex wraps the JSON in prose", async () => {
+    const runner: CliRunner = async () => ({
+      stdout:
+        'Thinking...\n[{"type":"message","payload":{"text":"hey, around!"}},{"type":"done","payload":{"status":"completed"}}]\nDone.',
+      stderr: "",
+      exitCode: 0,
+    });
+    const actor = new CodexCliActor({ runner });
+    const res = await actor.run({
+      renderedPrompt: "hi",
+      promptPacket: {} as PromptPacket,
+      runType: "normal_chat",
+      allowedOutputs: ["message", "done"],
+    } as unknown as ActorInferenceRequest);
+    const msg = res.drafts.find((d) => d.type === "message");
+    expect(msg && msg.type === "message" ? msg.payload.text : "").toBe(
+      "hey, around!",
+    );
   });
 });
 

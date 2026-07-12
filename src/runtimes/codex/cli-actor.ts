@@ -27,12 +27,17 @@ const log = logger.child("codex-cli");
 const OUTPUT_INSTRUCTION = [
   "",
   "=== PARAM OUTPUT FORMAT (STRICT) ===",
-  "Respond with ONLY a JSON array of Param actor outputs. No prose, no code",
-  "fence, no explanation before or after the JSON.",
+  "You are replying in a chat, NOT running a coding task. Respond with ONLY a",
+  "JSON array of Param actor outputs — no prose, no code fence, nothing before",
+  "or after the JSON.",
   'Each element is {"type": <allowed output>, "payload": { ... }} using only',
   "the allowed outputs and payload shapes for this run.",
-  'Always end the array with {"type":"done","payload":{"status":"completed"}}.',
-  "If you should stay quiet, return exactly:",
+  "For a normal chat turn you MUST include at least one message output with your",
+  'actual reply text, THEN end with {"type":"done","payload":{"status":"completed"}}.',
+  "Example of a normal reply:",
+  '[{"type":"message","payload":{"text":"hey, yeah I\'m around — what\'s up?"}},{"type":"done","payload":{"status":"completed"}}]',
+  '"done" on its own is NOT a reply. Only omit the message when the situation',
+  "genuinely needs no response, and then say so explicitly:",
   '[{"type":"no_reply","payload":{"reason":"nothing_to_add"}},{"type":"done","payload":{"status":"completed"}}]',
 ].join("\n");
 
@@ -93,6 +98,29 @@ const SAFE_FALLBACK: ActorOutputDraft[] = [
   { type: "no_reply", payload: { reason: "nothing_to_add" } },
   { type: "done", payload: { status: "completed" } },
 ];
+
+/**
+ * codex exec may wrap the JSON array in reasoning/prose. Extract the array so
+ * the parser (which JSON.parses the whole string) doesn't fail on surrounding
+ * text: if the output isn't already pure JSON / a code fence, slice from the
+ * first `[` to the last `]`. Falls back to the raw text unchanged.
+ */
+export function extractOutputArray(stdout: string): string {
+  const trimmed = stdout.trim();
+  if (
+    trimmed.startsWith("[") ||
+    trimmed.startsWith("{") ||
+    trimmed.startsWith("```")
+  ) {
+    return trimmed;
+  }
+  const start = trimmed.indexOf("[");
+  const end = trimmed.lastIndexOf("]");
+  if (start >= 0 && end > start) {
+    return trimmed.slice(start, end + 1);
+  }
+  return trimmed;
+}
 
 export type CodexCliActorOptions = {
   command?: string;
@@ -170,7 +198,7 @@ export class CodexCliActor implements ActorInference {
       return { drafts: SAFE_FALLBACK, provider: "codex-cli" };
     }
 
-    const { drafts, errors } = parseActorOutputs(res.stdout);
+    const { drafts, errors } = parseActorOutputs(extractOutputArray(res.stdout));
     if (drafts.length === 0) {
       log.warn("codex cli produced no valid outputs; staying quiet", {
         errors: errors.slice(0, 3),
@@ -179,6 +207,23 @@ export class CodexCliActor implements ActorInference {
         stdoutHead: res.stdout.slice(0, 800),
       });
       return { drafts: SAFE_FALLBACK, provider: "codex-cli" };
+    }
+    // Parsed, but the model closed the turn with only `done`/nothing to say —
+    // log the raw output so a mis-following model is diagnosable in one run
+    // (the actor will simply stay quiet, which for a normal turn is a bug).
+    const hasReplyOrAction = drafts.some(
+      (d) =>
+        d.type === "message" ||
+        d.type === "react_to_message" ||
+        d.type === "render_ui" ||
+        d.type === "no_reply" ||
+        d.type === "tool_call" ||
+        d.type === "spawn_task_agent",
+    );
+    if (!hasReplyOrAction) {
+      log.warn("codex cli returned no message/action (only done); staying quiet", {
+        stdoutHead: res.stdout.slice(0, 800),
+      });
     }
     return { drafts, provider: "codex-cli" };
   }
