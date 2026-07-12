@@ -262,8 +262,16 @@ export async function startWorker(signal: AbortSignal): Promise<void> {
       let processed = true;
       while (processed && !signal.aborted) {
         processed = await runJobsOnce(deps);
+        // Run maintenance INSIDE the drain (at most every 60s), not only after
+        // it empties — under sustained job arrival the drain loop never exits,
+        // which would otherwise starve approval expiry and proactive schedule
+        // firing indefinitely.
+        if (Date.now() - lastMaintenanceMs > 60_000) {
+          lastMaintenanceMs = Date.now();
+          await runMaintenanceOnce(deps);
+        }
       }
-      // Periodic maintenance (expire overdue approvals) at most every 60s.
+      // Also run once when the queue is idle (keeps the cadence when quiet).
       if (Date.now() - lastMaintenanceMs > 60_000) {
         lastMaintenanceMs = Date.now();
         await runMaintenanceOnce(deps);

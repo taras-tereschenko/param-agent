@@ -41,8 +41,12 @@ export class CodexChatBrain implements ActorInference {
   }
 
   async isAvailable(): Promise<boolean> {
-    const availability = await this.adapter.checkAvailability();
-    return availability.available;
+    // run() is intentionally not implemented in this environment (the proven
+    // prompt-handoff + output-parsing path is unfinished), so this brain is NOT
+    // usable — report false. Otherwise resolveInference would select it on a
+    // box where the codex binary probes available, and EVERY turn would throw.
+    // The direct-CLI CodexCliActor is the working codex path.
+    return false;
   }
 
   async run(_request: ActorInferenceRequest): Promise<ActorInferenceResult> {

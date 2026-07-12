@@ -388,7 +388,12 @@ async function wakeActorForResult(
 export async function runJobsOnce(deps: WorkerDeps): Promise<boolean> {
   const job = await jobsRepository.claimNextJob(deps.db, {
     workerId: deps.workerId,
-    leaseSeconds: 60,
+    // Must exceed the longest single job — a codex CLI turn can take ~120s. A
+    // 60s lease expired mid-turn, so completeJob (which requires an unexpired
+    // lock) failed and the job was re-claimed + re-run every turn (wasted
+    // inference under multi-worker). 300s matches the actor-run lease and leaves
+    // headroom over the CLI timeout.
+    leaseSeconds: 300,
   });
   if (!job) {
     return false;

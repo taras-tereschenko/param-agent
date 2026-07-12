@@ -102,6 +102,12 @@ export async function runActorInvocation(
     "waiting_tool",
     "waiting_approval",
     "compacting",
+    // "interrupted": reboot recovery marks a lock-expired run interrupted. Its
+    // actor_invocation job is still re-claimable (attempts < max), so allow the
+    // re-claim through to the prior-outputs re-delivery path below — otherwise a
+    // reply that was persisted but never sent (crash during the Telegram send)
+    // is orphaned forever on the single-worker reboot path.
+    "interrupted",
   ]);
   if (!activeStatuses.has(run.status)) {
     return { ran: false, delivered: 0, stayedQuiet: true };
@@ -550,6 +556,37 @@ export async function runActorInvocation(
         ? "stayed quiet"
         : `sent ${delivered} message(s) via ${turn.provider}`,
     });
+
+    // Reconcile messages that arrived DURING this turn. handleInbound defers a
+    // message to an active run ("becomes context for it"), but this run
+    // snapshotted its context once at the start and never re-read it — so a
+    // follow-up that landed mid-inference (codex turns take up to ~120s) was
+    // never seen and, if nothing else re-triggered, silently dropped. Re-check
+    // for the newest inbound message the actor didn't see and enqueue a
+    // follow-up. Bounded: the follow-up run sees it (its own snapshot), and
+    // startActorRun's one-active-run guard dedupes against the continuation /
+    // pre-send-refresh enqueues above.
+    try {
+      const seen = new Set(ctx.knownEventIds);
+      const recent = await eventsRepository.listSessionEvents(db, run.sessionId, 20);
+      const unseen = recent
+        .filter((e) => e.type === "chat.message.received" && !seen.has(e.id))
+        .at(-1);
+      if (unseen) {
+        await startActorRun(db, {
+          sessionId: run.sessionId,
+          runType: "normal_chat",
+          runtime: deps.config.actor.defaultRuntime,
+          triggerEventId: unseen.id,
+          dueAt: new Date(Date.now() + 400),
+        });
+      }
+    } catch (error) {
+      logger.warn("post-turn reconciliation failed", {
+        runId: run.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     return { ran: true, delivered, stayedQuiet: turn.stayedQuiet };
   } catch (error) {

@@ -103,6 +103,13 @@ describe("CodexChatBrain honest fallback", () => {
       (thrown as ParamError).message.includes("codex chat-brain unavailable"),
     ).toBe(true);
   });
+
+  test("isAvailable() is false even when the codex binary probes available (run() unimplemented)", async () => {
+    // The binary being present must NOT make resolveInference select this brain,
+    // since run() always throws — that would fail every turn. Report unusable.
+    const brain = new CodexChatBrain({ probe: fakeProbe({ ok: true }) });
+    expect(await brain.isAvailable()).toBe(false);
+  });
 });
 
 describe("buildRuntimeFrame", () => {
